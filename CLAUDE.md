@@ -1,16 +1,36 @@
 # Austruss — Drafting Scope & Details
 
-Drafting scope and project handover tool; reads Excel files (SheetJS from CDN) and stores work in localStorage.
+Drafting scope and project handover tool. Handover jobs are stored in
+Supabase behind a shared team passcode; images go to Cloudflare R2.
 
 ## Structure
 
-The whole app is a single self-contained `index.html` (HTML, CSS and
-JavaScript inline). There is no build step, package manager or test suite.
+- `index.html` — the whole app (HTML, CSS and JavaScript inline). No build
+  step, package manager or test suite. The database code is the
+  "DATABASE (Supabase + R2 images via the Worker)" section near the end.
+- `worker.js` + `wrangler.jsonc` — Cloudflare Worker `austruss-handover`:
+  serves `index.html` and the image endpoints (`PUT /api/images/<sha256>.<ext>`,
+  `GET /images/<sha256>.<ext>`) backed by the R2 bucket `austruss-handover`.
+- `supabase/migrations/` — the `handovers` table and `handover_*` functions,
+  applied to the shared project `vrhapkrtbxcccmbnjkco`.
+
+## Data model
+
+- `public.handovers` holds one row per job; `data` is the app's whole `state`
+  object with base64 images replaced by `/images/...` URLs.
+- The table is closed to the publishable key. Every read/write is a
+  `handover_*` function that checks the passcode (bcrypt hash in
+  `private.handover_settings`). Change it in the Supabase SQL editor:
+  `select private.handover_set_passcode('…');`
+- Saves carry the version the editor loaded; a mismatch is a 409 and the app
+  asks whose version to keep. Deletes are soft (`deleted_at`).
+- Imports dedupe on the SHA-256 of the file (`import_hash`).
 
 ## Running locally
 
-`python -m http.server 8104 --bind 127.0.0.1`, then open
-http://127.0.0.1:8104/ (configured in `.claude/launch.json`).
+Use the `project-handover` preview config (`wrangler dev` on port 8104) — plain
+`python -m http.server` can't serve the image endpoints. The local R2 bucket is
+simulated; Supabase is the real shared database, so clean up test rows.
 
 ## Working rules
 
@@ -20,6 +40,10 @@ http://127.0.0.1:8104/ (configured in `.claude/launch.json`).
   edits rather than rewriting the file.
 - Verify UI changes in the browser preview, including a phone-width
   layout, and check the console for errors.
-- Don't change backend URLs (Google Apps Script / Supabase) or anything
-  touching stored data formats in localStorage without calling it out, since
-  existing users' saved data depends on them.
+- Code that fills the form (not a person typing) must run inside
+  `formLoading++ … formLoading--`, or `autoSave()` fires mid-load and
+  overwrites the local autosave with a half-filled form.
+- Don't change backend URLs (Supabase / R2) or the shape of `state` and the
+  localStorage keys (`austruss_autosave`, `austruss_cloud_job`,
+  `austruss_passcode`, `austruss_editor`) without calling it out, since saved
+  jobs and people's browsers depend on them.

@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "project-handover",
-      "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "8104", "--bind", "127.0.0.1"],
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["--yes", "wrangler@4", "dev", "--persist-to", "../.wrangler/project-handover-state", "--port", "8104", "--ip", "127.0.0.1"],
       "port": 8104
     }
   ]

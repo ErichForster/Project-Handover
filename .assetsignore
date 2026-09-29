@@ -1,0 +1,13 @@
+# Files in this repo that are not part of the deployed site.
+.git
+.claude
+.wrangler
+.assetsignore
+.gitignore
+wrangler.jsonc
+worker.js
+supabase
+scripts
+node_modules
+CLAUDE.md
+README.md
