@@ -358,6 +358,56 @@
   .modal-box h3 { margin-bottom: 14px; color: var(--navy); }
   .modal-box p  { font-size: 13px; color: var(--muted); margin-bottom: 18px; }
   .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+  #conflictModal { z-index: 250; }
+  #pickModal { z-index: 220; }
+  #gateModal { z-index: 300; }
+
+  /* ── DATABASE (jobs list, passcode, save status) ── */
+  body:not(.cloud-on) .cloud-only { display: none !important; }
+  /* Job details that come from Smartsheet (Project Admin) are read-only. */
+  .form-grid input.ss-locked {
+    background: #f3efea; color: var(--text); cursor: default;
+    border-color: #e2d6c8; border-style: dashed;
+  }
+  .job-pick { gap: 8px; }
+  .job-pick .btn { flex-shrink: 0; }
+  .job-pick input[readonly] { cursor: pointer; }
+  .ss-tag { font-size: 11px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+  .cloud-pill {
+    font-size: 12px; font-weight: 500; color: rgba(255,255,255,.75);
+    white-space: nowrap; align-self: center; padding: 0 4px;
+  }
+  .cloud-pill.error { color: #ff9b8f; }
+  .modal-box.wide { max-width: 760px; max-height: 88vh; display: flex; flex-direction: column; }
+  .modal-box label.field { display: block; font-size: 12px; font-weight: 600; color: var(--navy); margin: 0 0 4px; }
+  .modal-box input.field {
+    width: 100%; padding: 8px 10px; margin-bottom: 14px;
+    border: 1.5px solid var(--border); border-radius: var(--radius);
+    font-family: 'Barlow', sans-serif; font-size: 14px;
+  }
+  .gate-error { color: var(--red); font-size: 13px; min-height: 18px; margin: -6px 0 10px; }
+  .jobs-toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .jobs-toolbar input { flex: 1 1 200px; margin: 0 !important; }
+  .jobs-toolbar .btn-outline, #importResults .btn-outline { color: var(--navy); border-color: var(--border); }
+  .jobs-list { overflow-y: auto; flex: 1 1 auto; min-height: 120px; border: 1.5px solid var(--border); border-radius: var(--radius); }
+  .jobs-list.drag { border-color: var(--amber); background: var(--pale); }
+  .job-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px; border-bottom: 1px solid var(--pale2); cursor: pointer;
+  }
+  .job-row:last-child { border-bottom: none; }
+  .job-row:hover { background: var(--pale); }
+  .job-row.current { background: var(--pale2); }
+  .job-row .job-main { flex: 1 1 auto; min-width: 0; }
+  .job-row .job-title { font-weight: 600; color: var(--navy); font-size: 14px; overflow-wrap: anywhere; }
+  .job-row .job-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .jobs-empty { padding: 24px; text-align: center; color: var(--muted); font-size: 13px; }
+  #importResults { font-size: 13px; margin-top: 12px; max-height: 30vh; overflow-y: auto; }
+  #importResults:empty { display: none; }
+  #importResults div { padding: 3px 0; overflow-wrap: anywhere; }
+  @media (max-width: 600px) {
+    .modal-box { padding: 20px 16px; width: calc(100% - 32px); }
+  }
 
   /* ── MULTISELECT ── */
   .multiselect-wrap { position: relative; width: 100%; }
@@ -436,7 +486,8 @@
     display: flex; justify-content: space-between; align-items: center;
     font-weight: 700; font-size: 13px; color: var(--navy);
   }
-  .variation-body { padding: 16px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  .variation-body { padding: 16px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  @media (max-width: 700px) { .variation-body { grid-template-columns: 1fr 1fr; } }
   .variation-body .full { grid-column: 1 / -1; }
   .variation-body label { font-size: 12px; font-weight: 600; color: var(--navy); display: block; margin-bottom: 4px; }
   .variation-body input[type=text], .variation-body input[type=date], .variation-body textarea {
@@ -687,6 +738,8 @@
     <span class="brand-subtitle">Drafting Scope & Details</span>
   </div>
   <div class="actions">
+    <span id="cloudStatus" class="cloud-pill cloud-only"></span>
+    <button class="btn btn-outline cloud-only" onclick="openJobs()" title="All handovers in the database">🗂 Jobs</button>
     <button class="btn btn-outline" onclick="newProject()" title="Clear all data and start fresh">✨ New Project</button>
     <button class="btn btn-outline" onclick="importExcel()">⬆ Import Excel</button>
     <input type="file" id="excelFileInput" accept=".xlsx,.xls" style="display:none" onchange="handleExcelImport(event)">
@@ -713,6 +766,7 @@
   <a href="#images" onclick="navClick(this)">🗺 Maps & Images</a>
   <a href="#variations" onclick="navClick(this)">📝 Variations</a>
   <div class="nav-section" style="margin-top:12px">Actions</div>
+  <a href="#" class="cloud-only" onclick="openJobs();return false">🗂 Jobs</a>
   <a href="#" onclick="saveSession();return false">💾 Save Session</a>
   <a href="#" onclick="document.getElementById('sessionFileInput').click();return false">📂 Load Session</a>
   <a href="#" onclick="exportExcel();return false">📊 Export Excel</a>
@@ -742,7 +796,11 @@
         </div>
         <div class="form-row">
           <label>Austruss Job Number</label>
-          <div class="field-wrap"><input type="text" id="jobNumber" placeholder="e.g. AUS-2026-001" onchange="autoSave()"></div>
+          <div class="field-wrap job-pick">
+            <input type="text" id="jobNumber" placeholder="e.g. AUS-2026-001" onchange="autoSave()">
+            <button class="btn btn-amber btn-sm cloud-only" id="jobPickBtn" onclick="openJobPicker()">🔍 Pick job</button>
+            <span class="ss-tag cloud-only" id="ssTag"></span>
+          </div>
         </div>
         <div class="form-row">
           <label>Austruss Project Name</label>
@@ -791,16 +849,17 @@
           </div>
         </div>
         <div class="form-row">
-          <label>Transport Requirements</label>
+          <label>Transport Restrictions</label>
           <div class="field-wrap">
             <div class="multiselect-wrap" id="transportWrap">
               <div class="multiselect-display" id="transportDisplay" onclick="toggleMultiselect('transport')">— Select all that apply —</div>
               <div class="multiselect-dropdown" id="transportDropdown" style="display:none">
-                <label><input type="checkbox" value="Standard" onchange="updateMultiselect('transport')"> Standard</label>
-                <label><input type="checkbox" value="Semi Access" onchange="updateMultiselect('transport')"> Semi Access</label>
-                <label><input type="checkbox" value="Rigid Access" onchange="updateMultiselect('transport')"> Rigid Access</label>
-                <label><input type="checkbox" value="Wide Load Access" onchange="updateMultiselect('transport')"> Wide Load Access</label>
-<label><input type="checkbox" value="Permit Required" onchange="updateMultiselect('transport')"> Permit Required</label>
+                <label><input type="checkbox" value="None" onchange="updateMultiselect('transport', this)"> None — no restrictions</label>
+                <label><input type="checkbox" value="Standard" onchange="updateMultiselect('transport', this)"> Standard</label>
+                <label><input type="checkbox" value="Semi Access" onchange="updateMultiselect('transport', this)"> Semi Access</label>
+                <label><input type="checkbox" value="Rigid Access" onchange="updateMultiselect('transport', this)"> Rigid Access</label>
+                <label><input type="checkbox" value="Wide Load Access" onchange="updateMultiselect('transport', this)"> Wide Load Access</label>
+<label><input type="checkbox" value="Permit Required" onchange="updateMultiselect('transport', this)"> Permit Required</label>
               </div>
             </div>
           </div>
@@ -1156,6 +1215,76 @@
   </div>
 </div>
 
+<!-- MODAL: team passcode -->
+<div class="modal-overlay" id="gateModal">
+  <div class="modal-box">
+    <h3>🔒 Austruss Handovers</h3>
+    <p>Enter the drafting team passcode to open the handover database.</p>
+    <form onsubmit="submitGate(event)">
+      <label class="field" for="gatePasscode">Team passcode</label>
+      <input class="field" type="password" id="gatePasscode" autocomplete="current-password" required>
+      <label class="field" for="gateEditor">Your name <span style="font-weight:400;color:var(--muted)">(shown against your saves)</span></label>
+      <input class="field" type="text" id="gateEditor" autocomplete="name">
+      <div class="gate-error" id="gateError"></div>
+      <div class="modal-actions">
+        <button class="btn btn-amber" type="submit" id="gateSubmit">Open</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- MODAL: jobs in the database -->
+<div class="modal-overlay" id="jobsModal">
+  <div class="modal-box wide">
+    <h3>🗂 Handover Jobs</h3>
+    <div class="jobs-toolbar">
+      <input class="field" type="search" id="jobsFilter" placeholder="Search job number, project or client…" oninput="renderJobs()">
+      <button class="btn btn-amber" onclick="newProject()">✨ New</button>
+      <button class="btn btn-outline" onclick="document.getElementById('importFilesInput').click()" title="Add session files (.json) or saved HTML files to the database">⬆ Import files</button>
+      <button class="btn btn-outline" onclick="document.getElementById('importFolderInput').click()" title="Import every session file in a folder">📁 Import folder</button>
+      <input type="file" id="importFilesInput" accept=".json,.html,.htm" multiple style="display:none" onchange="importFiles(this.files);this.value=''">
+      <input type="file" id="importFolderInput" webkitdirectory multiple style="display:none" onchange="importFiles(this.files);this.value=''">
+    </div>
+    <div class="jobs-list" id="jobsList"
+         ondragover="event.preventDefault();this.classList.add('drag')"
+         ondragleave="this.classList.remove('drag')"
+         ondrop="event.preventDefault();this.classList.remove('drag');importFiles(event.dataTransfer.files)"></div>
+    <div id="importResults"></div>
+    <p style="margin:12px 0 0;font-size:12px">Tip: drop old session files (.json) onto the list to add them.</p>
+    <div class="modal-actions" style="margin-top:12px">
+      <button class="btn btn-outline" style="color:var(--navy);border-color:var(--border)" id="jobsClose" onclick="closeModal('jobsModal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: pick the job from Smartsheet -->
+<div class="modal-overlay" id="pickModal">
+  <div class="modal-box wide">
+    <h3>🔍 Pick the job</h3>
+    <p style="margin-bottom:12px">Jobs from Smartsheet → Project Admin. Search to include completed jobs.</p>
+    <div class="jobs-toolbar">
+      <input class="field" type="search" id="pickFilter" placeholder="Search job number, name, client or suburb…" oninput="renderPick()">
+    </div>
+    <div class="jobs-list" id="pickList"></div>
+    <div class="modal-actions" style="margin-top:12px;justify-content:space-between;flex-wrap:wrap">
+      <button class="btn btn-outline" style="color:var(--navy);border-color:var(--border)" onclick="pickUnlisted()" title="Type the details in by hand">Job isn’t in Smartsheet</button>
+      <button class="btn btn-outline" style="color:var(--navy);border-color:var(--border)" onclick="closeModal('pickModal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: save conflict -->
+<div class="modal-overlay" id="conflictModal">
+  <div class="modal-box">
+    <h3>⚠ Someone else saved this handover</h3>
+    <p><strong id="conflictWho">Another person</strong> saved this job after you opened it. Load their version (your latest changes are dropped), or overwrite it with yours?</p>
+    <div class="modal-actions">
+      <button class="btn btn-outline" style="color:var(--navy);border-color:var(--border)" onclick="resolveConflict('theirs')">Load their version</button>
+      <button class="btn btn-red" onclick="resolveConflict('mine')">Overwrite with mine</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL: unsupported import -->
 <div class="modal-overlay" id="importModal">
   <div class="modal-box">
@@ -1444,7 +1573,13 @@ function toggleMultiselect(id) {
   }
 }
 
-function updateMultiselect(id) {
+function updateMultiselect(id, changed) {
+  // "None" can't sit alongside actual restrictions: ticking one clears the other.
+  if (changed && changed.checked) {
+    document.querySelectorAll(`#${id}Dropdown input[type=checkbox]`).forEach(cb => {
+      if (cb !== changed && (changed.value === 'None' || cb.value === 'None')) cb.checked = false;
+    });
+  }
   const checks = document.querySelectorAll(`#${id}Dropdown input[type=checkbox]:checked`);
   const vals = Array.from(checks).map(c => c.value);
   const display = document.getElementById(id + 'Display');
@@ -1555,7 +1690,7 @@ function defaultBuilding(n) {
   return {
     name: `Building ${n}`,
     roofTruss: false, roofPurlin: false, roofCassette: false,
-    infillWalls: false, hybridSolution: false,
+    infillWalls: false, hybridSolution: false, floorFraming: false,
     qty: '', unit: 'm2_roof',
     scopeWritten: '', notes: ''
   };
@@ -1591,6 +1726,7 @@ function renderBuildings() {
           <div class="check-row">
             <label><input type="checkbox" ${b.infillWalls?'checked':''} onchange="state.buildings[${i}].infillWalls=this.checked;autoSave()"> Infill Walls</label>
             <label><input type="checkbox" ${b.hybridSolution?'checked':''} onchange="state.buildings[${i}].hybridSolution=this.checked;autoSave()"> Hybrid Solution</label>
+            <label><input type="checkbox" ${b.floorFraming?'checked':''} onchange="state.buildings[${i}].floorFraming=this.checked;autoSave()"> Floor Framing</label>
           </div>
         </div>
         <div>
@@ -1603,6 +1739,7 @@ function renderBuildings() {
               onchange="state.buildings[${i}].unit=this.value;autoSave()">
               <option value="m2_roof" ${(b.unit||'m2_roof')==='m2_roof'?'selected':''}>Roof Area (m²)</option>
               <option value="m2_wall" ${b.unit==='m2_wall'?'selected':''}>Wall Area (m²)</option>
+              <option value="m2_floor" ${b.unit==='m2_floor'?'selected':''}>Floor Area (m²)</option>
               <option value="lm" ${b.unit==='lm'?'selected':''}>Lineal Metres (lm)</option>
               <option value="units" ${b.unit==='units'?'selected':''}>Units</option>
             </select>
@@ -1643,7 +1780,9 @@ function toggleBuildingPanel(i) {
 // VARIATIONS
 // ════════════════════════════════════════════════════
 function defaultVariation(n) {
-  return { id: Date.now()+n, title:`Variation ${n}`, description:'', onSiteDate:'', dateReceived:'', dateApproved:'', images:[] };
+  return { id: Date.now()+n, title:`Variation ${n}`, description:'', dateSubmitted:'', onSiteDate:'', dateReceived:'', dateApproved:'', images:[],
+           // When it was entered and by whom, so the record stands up as evidence.
+           createdAt: new Date().toISOString(), createdBy: lsGet(EDITOR_KEY) || '' };
 }
 
 function renderVariations() {
@@ -1673,8 +1812,8 @@ function renderVariations() {
           <textarea rows="3" placeholder="Describe the scope change…" oninput="state.variations[${i}].description=this.value;autoSave()">${escHtml(v.description||'')}</textarea>
         </div>
         <div>
-          <label>On-Site Date</label>
-          <input type="date" value="${escHtml(v.onSiteDate)}" onchange="state.variations[${i}].onSiteDate=this.value;autoSave()">
+          <label>Date Submitted</label>
+          <input type="date" value="${escHtml(v.dateSubmitted||'')}" onchange="state.variations[${i}].dateSubmitted=this.value;autoSave()">
         </div>
         <div>
           <label>Date Received</label>
@@ -1684,6 +1823,11 @@ function renderVariations() {
           <label>Date Approved</label>
           <input type="date" value="${escHtml(v.dateApproved)}" onchange="state.variations[${i}].dateApproved=this.value;autoSave()">
         </div>
+        <div>
+          <label>On-Site Date</label>
+          <input type="date" value="${escHtml(v.onSiteDate)}" onchange="state.variations[${i}].onSiteDate=this.value;autoSave()">
+        </div>
+        ${variationLogged(v) ? `<div class="full" style="font-size:12px;color:var(--muted)">${escHtml(variationLogged(v))}</div>` : ''}
         <div class="full">
           <label>Scope Images</label>
           <div>
@@ -1702,6 +1846,15 @@ function renderVariations() {
       </div>`;
     c.appendChild(div);
   });
+}
+
+// "Logged 22 Aug 2026 by Sam" - when the variation was entered in the app.
+// Older variations have no createdAt, but their id is the creation time.
+function variationLogged(v) {
+  const t = v.createdAt ? new Date(v.createdAt) : (v.id > 1.5e12 ? new Date(Math.floor(v.id)) : null);
+  if (!t || isNaN(t)) return '';
+  return 'Logged ' + t.toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: 'numeric' }) +
+    (v.createdBy ? ' by ' + v.createdBy : '');
 }
 
 function addVariation() {
@@ -1946,12 +2099,19 @@ function applyStateToForm() {
   renderOtherNotes();
   restoreMap();
   updateScopeProgress();
+  updateSsLocks();
 }
 
 // ════════════════════════════════════════════════════
 // SAVE / LOAD JSON
 // ════════════════════════════════════════════════════
 function autoSave() {
+  if (formLoading) return;   // the form is being filled in by code, not a person
+  saveLocal();
+  scheduleCloudSave();
+}
+
+function saveLocal() {
   collectFormData();
   try {
     const lite = Object.assign({}, state, { _savedAt: new Date().toISOString() });
@@ -1988,6 +2148,8 @@ function confirmRestore() {
   closeModal('restoreModal');
   showToast('✅ Session restored — ' + (state.projectName || 'project'));
   window._pendingRestore = null;
+  // Online, a restored browser autosave becomes a new job in the database.
+  scheduleCloudSave(0);
 }
 
 function discardRestore() {
@@ -1995,26 +2157,54 @@ function discardRestore() {
   window._pendingRestore = null;
   closeModal('restoreModal');
   initFresh();
+  if (cloudOn) openJobs();
 }
 
-function newProject() {
-  if (!confirm('Start a new project? This will clear all current data (save your session first if needed).')) return;
+async function newProject() {
+  const msg = cloudOn
+    ? 'Start a new handover? The current one stays saved in the database.'
+    : 'Start a new project? This will clear all current data (save your session first if needed).';
+  if (!confirm(msg)) return;
+  if (cloudOn && !(await flushCloudSave())) return;
+  resetForm();
+  localStorage.removeItem('austruss_autosave');
+  writeCloudJob(null);
+  lastSavedJson = null;
+  setCloudStatus('');
+  closeModal('jobsModal');
+  initFresh();
+  showToast('✨ New project started');
+  // Every new handover starts by choosing its job from Smartsheet.
+  if (cloudOn) openJobPicker();
+}
+
+function resetForm() {
+  formLoading++;
+  try { resetFormFields(); } finally { formLoading--; }
+}
+
+function resetFormFields() {
   state = {
     scopeImages: [], siteImages: [], links: [], contacts: [],
     buildings: [], variations: [], otherNotes: [], transportSelected: [],
     mapOriginAddress: '7 Braemar Ave, Braemar',
   };
-  localStorage.removeItem('austruss_autosave');
-  // Reset form
-  document.querySelectorAll('input[type=text], input[type=date], input[type=number], textarea, select').forEach(el => {
+  document.querySelectorAll('#main input[type=text], #main input[type=date], #main input[type=number], #main textarea, #main select').forEach(el => {
     if (el.id === 'mapOriginAddress') { el.value = '7 Braemar Ave, Braemar'; return; }
     if (el.tagName === 'SELECT') { el.selectedIndex = 0; return; }
     el.value = '';
   });
-  document.querySelectorAll('input[type=checkbox]').forEach(el => el.checked = false);
+  document.querySelectorAll('#main input[type=checkbox]').forEach(el => el.checked = false);
+  document.querySelectorAll('#main input[type=date]').forEach(el => el.disabled = false);
+  const eciNo = document.getElementById('eciNo');
+  if (eciNo) { eciNo.checked = true; toggleECI(); }
+  ['snapshotThumbWrap','printStaticMapScreen','printStaticMapWrap'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.style.display = 'none';
+  });
   document.getElementById('projectNameDisplay').textContent = 'New Project';
-  initFresh();
-  showToast('✨ New project started');
+  renderImages('scopeImages');
+  renderImages('siteImages');
+  updateSsLocks();
 }
 
 function saveSession() {
@@ -2030,6 +2220,9 @@ function saveSession() {
 function loadSession(e) {
   const file = e.target.files[0];
   if (!file) return;
+  // Online, a loaded file becomes (or reopens) its own job rather than
+  // overwriting whichever job is open.
+  if (cloudOn) { importFiles([file], { open: true }); e.target.value = ''; return; }
   const reader = new FileReader();
   reader.onload = ev => {
     try {
@@ -2073,7 +2266,7 @@ function saveHTML() {
     '</' + 'script' + '>' +
     '<!--AUSTRUSS_STATE_END-->';
 
-  html = html.replace(/<\/body>/i, inject + '</body>');
+  html = absoluteImageUrls(html.replace(/<\/body>/i, inject + '</body>'));
   const blob = new Blob([html], {type:'text/html'});
   const printDate = new Date().toISOString().slice(0,10);
   const fname = [(state.jobNumber||'').replace(/[^a-z0-9]/gi,'_'), project, 'Handover', printDate].filter(Boolean).join('_');
@@ -2125,7 +2318,7 @@ function buildLockedHTMLString(s, date) {
   const C_MUTED  = '#7a6a5a';
 
   const sectionHdr = (icon, title) =>
-    `<div style="background:${C_DARK};color:#fff;padding:12px 20px;font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:700;letter-spacing:.5px;border-radius:6px 6px 0 0;display:flex;align-items:center;gap:8px">
+    `<div class="sec-hdr" style="background:${C_DARK};color:#fff;padding:12px 20px;font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:700;letter-spacing:.5px;border-radius:6px 6px 0 0;display:flex;align-items:center;gap:8px">
       ${icon} ${title}
     </div>`;
 
@@ -2143,8 +2336,9 @@ function buildLockedHTMLString(s, date) {
     </tr>`;
   };
 
-  const card = (hdr, body) =>
-    `<div style="background:#fff;border-radius:6px;box-shadow:0 2px 12px rgba(43,43,43,.1);margin-bottom:24px;overflow:hidden">
+  // keep: print the whole card on one page (short sections like the map).
+  const card = (hdr, body, keep) =>
+    `<div class="card${keep ? ' keep' : ''}" style="background:#fff;border-radius:6px;box-shadow:0 2px 12px rgba(43,43,43,.1);margin-bottom:24px;overflow:hidden">
       ${hdr}
       <div style="padding:0">${body}</div>
     </div>`;
@@ -2163,7 +2357,7 @@ function buildLockedHTMLString(s, date) {
     ${infoRow('Site Address',           s.siteAddress)}
     ${infoRow('City / Town',            s.cityTown)}
     ${infoRow('Proximity to Ocean',     s.proximityToOcean)}
-    ${infoRow('Transport',              transport)}
+    ${infoRow('Transport Restrictions', transport)}
     ${infoRow('Cranage',                cranageStr)}
     ${infoRow('Draftsperson(s)',        s.draftspersons)}
     ${infoRow('Design Time Allowed',    s.designTimeAllowed)}
@@ -2173,12 +2367,12 @@ function buildLockedHTMLString(s, date) {
   // ── BUILDINGS ──
   const buildingsHTML = (s.buildings||[]).length ? (s.buildings||[]).map((b,i) => {
     const roofParts = [b.roofTruss?'Truss':null,b.roofPurlin?'Purlin':null,b.roofCassette?'Cassette':null].filter(Boolean).join(', ')||'—';
-    const other = [b.infillWalls?'Infill Walls':null,b.hybridSolution?'Hybrid Solution':null].filter(Boolean).join(', ')||'—';
-    const unitLabels = { m2_roof:'m² (Roof Area)', m2_wall:'m² (Wall Area)', lm:'lm (Lineal Metres)', units:'Units' };
+    const other = [b.infillWalls?'Infill Walls':null,b.hybridSolution?'Hybrid Solution':null,b.floorFraming?'Floor Framing':null].filter(Boolean).join(', ')||'—';
+    const unitLabels = { m2_roof:'m² (Roof Area)', m2_wall:'m² (Wall Area)', m2_floor:'m² (Floor Area)', lm:'lm (Lineal Metres)', units:'Units' };
     const unit = b.unit || 'm2_roof';
     const qtyStr = b.qty ? (b.qty + ' ' + (unitLabels[unit] || unit)) : '—';
     const bg = i%2===0?C_PALE:'#fff';
-    return `<div style="background:${bg};border-bottom:1px solid ${C_BORDER};padding:10px 16px">
+    return `<div class="keep" style="background:${bg};border-bottom:1px solid ${C_BORDER};padding:10px 16px">
       <div style="font-weight:700;font-size:13px;color:${C_DARK};margin-bottom:6px">🏗 ${esc(b.name||'Building '+(i+1))}</div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:12px;margin-bottom:6px">
         <div><span style="color:${C_MUTED}">Roof Type:</span> ${esc(roofParts)}</div>
@@ -2327,18 +2521,23 @@ function buildLockedHTMLString(s, date) {
   }
 
   // ── IMAGES ──
+  // Each image prints as one unit - its title above, the drawing, then the
+  // file name - and never splits across pages (see .img-block in the CSS).
+  // The title used to sit under the drawing, so it read as the heading of
+  // the next one and ended up stranded at the foot of a page.
+  const imgBlock = (img, meta) => `
+      <div class="img-block" style="border-top:1px solid ${C_BORDER}">
+        ${meta && (meta.description || meta.notes) ? `
+        <div style="padding:10px 14px;background:${C_PALE}">
+          ${meta.description ? `<div style="font-size:13px;font-weight:600;color:${C_DARK};margin-bottom:${meta.notes ? '4px' : '0'}">📍 ${esc(meta.description)}</div>` : ''}
+          ${meta.notes ? `<div style="font-size:12px;color:${C_MUTED}">${esc(meta.notes)}</div>` : ''}
+        </div>` : ''}
+        <img src="${img.src}" alt="${esc(img.name)}" style="width:100%;height:auto;display:block;margin:0 auto">
+        <div style="background:${C_PALE2};padding:6px 14px;font-size:12px;color:${C_MUTED};font-weight:500">📄 ${esc(img.name)}</div>
+      </div>`;
   const renderImgs = (imgs, label, showMeta) => {
     if (!imgs || !imgs.length) return `<div style="padding:16px;color:#aaa;font-size:13px">No ${label} uploaded</div>`;
-    return imgs.map(img => `
-      <div style="margin-bottom:0;border-top:1px solid ${C_BORDER}">
-        <img src="${img.src}" alt="${esc(img.name)}" style="width:100%;height:auto;display:block">
-        <div style="background:${C_PALE2};padding:6px 14px;font-size:12px;color:${C_MUTED};font-weight:500">📄 ${esc(img.name)}</div>
-        ${showMeta && (img.description || img.notes) ? `
-        <div style="padding:10px 14px;background:${C_PALE}">
-          ${img.description ? `<div style="font-size:13px;font-weight:600;color:${C_DARK};margin-bottom:4px">📍 ${esc(img.description)}</div>` : ''}
-          ${img.notes ? `<div style="font-size:12px;color:${C_MUTED}">${esc(img.notes)}</div>` : ''}
-        </div>` : ''}
-      </div>`).join('');
+    return imgs.map(img => imgBlock(img, showMeta ? img : null)).join('');
   };
 
   const lockedHTML = `<!DOCTYPE html>
@@ -2363,10 +2562,19 @@ function buildLockedHTMLString(s, date) {
   @media print{
     .topbar{display:none}
     .no-print{display:none}
-    body{background:#fff}
+    body{background:#fff;min-height:0}
     .container{margin:0;padding:10px}
     .two-col{display:block}
     .two-col > *{margin-bottom:20px}
+    /* Page breaks: a section title never ends a page, an image never splits
+       from its title, and the map card prints whole. */
+    .sec-hdr{break-after:avoid;page-break-after:avoid}
+    .img-block{break-inside:avoid;page-break-inside:avoid}
+    /* 105mm lets two landscape plans (with titles and notes) share a page. */
+    .img-block img{width:auto!important;max-width:100%;max-height:105mm}
+    .keep{break-inside:avoid;page-break-inside:avoid}
+    .card{box-shadow:none!important}
+    .var-head{break-inside:avoid;page-break-inside:avoid}
   }
   @media(max-width:700px){.two-col{display:block}}
 </style>
@@ -2472,7 +2680,7 @@ function buildLockedHTMLString(s, date) {
   ${card(sectionHdr('📐','Scope Diagrams / Plans'), renderImgs(s.scopeImages,'scope diagrams',true))}
 
   <!-- MAP -->
-  ${card(sectionHdr('📍','Site Location & Map'), mapHTML)}
+  ${card(sectionHdr('📍','Site Location & Map'), mapHTML, true)}
 
   <!-- SITE PHOTOS -->
   ${card(sectionHdr('📷','Site Photos / Access Maps'), renderImgs(s.siteImages,'site photos',false))}
@@ -2480,29 +2688,28 @@ function buildLockedHTMLString(s, date) {
   <!-- VARIATIONS -->
   ${(s.variations||[]).length ? card(sectionHdr('📝','Variations'), (s.variations||[]).map((v,i) => {
     const bg = i%2===0?C_PALE:'#fff';
-    const varImgs = (v.images||[]).map(img =>
-      `<div style="display:inline-block;margin:4px 4px 4px 0;vertical-align:top">
-        <img src="${img.src}" alt="${esc(img.name)}" style="width:160px;height:120px;object-fit:cover;border-radius:4px;border:1px solid ${C_BORDER};display:block">
-        <div style="font-size:10px;color:${C_MUTED};margin-top:2px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(img.name)}</div>
-      </div>`).join('');
-    return `<div style="background:${bg};border-bottom:2px solid ${C_BORDER};padding:16px 20px">
+    // Markups print full width, the same as scope diagrams - as thumbnails
+    // they were unreadable once there was more than one.
+    const varImgs = (v.images||[]).map(img => imgBlock(img, null)).join('');
+    const dateBox = (label, value) => `
+        <div style="background:${C_PALE2};padding:8px 12px;border-radius:4px">
+          <div style="font-weight:700;color:${C_MUTED};margin-bottom:2px">${label}</div>
+          <div>${fmtDate(value)}</div>
+        </div>`;
+    const logged = variationLogged(v);
+    return `<div style="background:${bg};border-bottom:2px solid ${C_BORDER}">
+      <div class="var-head" style="padding:16px 20px">
       <div style="font-weight:700;font-size:15px;color:${C_DARK};margin-bottom:10px">📝 ${esc(v.title||'Variation '+(i+1))}</div>
       ${v.description ? `<div style="font-size:13px;margin-bottom:12px;white-space:pre-wrap;line-height:1.5">${esc(v.description)}</div>` : ''}
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;font-size:12px;margin-bottom:${varImgs?'12px':'0'}">
-        <div style="background:${C_PALE2};padding:8px 12px;border-radius:4px">
-          <div style="font-weight:700;color:${C_MUTED};margin-bottom:2px">On-Site Date</div>
-          <div>${fmtDate(v.onSiteDate)}</div>
-        </div>
-        <div style="background:${C_PALE2};padding:8px 12px;border-radius:4px">
-          <div style="font-weight:700;color:${C_MUTED};margin-bottom:2px">Date Received</div>
-          <div>${fmtDate(v.dateReceived)}</div>
-        </div>
-        <div style="background:${C_PALE2};padding:8px 12px;border-radius:4px">
-          <div style="font-weight:700;color:${C_MUTED};margin-bottom:2px">Date Approved</div>
-          <div>${fmtDate(v.dateApproved)}</div>
-        </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;font-size:12px">
+        ${dateBox('Date Submitted', v.dateSubmitted)}
+        ${dateBox('Date Received', v.dateReceived)}
+        ${dateBox('Date Approved', v.dateApproved)}
+        ${dateBox('On-Site Date', v.onSiteDate)}
       </div>
-      ${varImgs ? `<div style="margin-top:4px">${varImgs}</div>` : ''}
+      ${logged ? `<div style="font-size:11px;color:${C_MUTED};margin-top:8px">${esc(logged)}</div>` : ''}
+      </div>
+      ${varImgs}
     </div>`;
   }).join('')) : ''}
 
@@ -2510,7 +2717,7 @@ function buildLockedHTMLString(s, date) {
 </body>
 </html>`;
 
-  return lockedHTML;
+  return absoluteImageUrls(lockedHTML);
 }
 
 function saveLockedHTML() {
@@ -2560,7 +2767,7 @@ function exportExcel() {
     ['Building Type',            s.buildingType           || ''],
     ['City / Town',              s.cityTown               || ''],
     ['Proximity to Ocean',       s.proximityToOcean       || ''],
-    ['Transport Requirements',   s.transportRequirements  || ''],
+    ['Transport Restrictions',   (s.transportSelected || []).join(', ')],
     ['Draftsperson(s)',          s.draftspersons          || ''],
     ['Notes',                    s.jobNotes               || ''],
     ['', '', '', ''],
@@ -2621,6 +2828,7 @@ function loadJSON() {
 function handleJSONLoad(e) {
   const file = e.target.files[0];
   if (!file) return;
+  if (cloudOn) { importFiles([file], { open: true }); e.target.value = ''; return; }
   const reader = new FileReader();
   reader.onload = ev => {
     try {
@@ -2901,8 +3109,14 @@ function restoreMap() {
 document.addEventListener('DOMContentLoaded', () => {
   buildScopeTable();
 
+  // A Save HTML copy carries the live page's classes; database buttons only
+  // come back if this copy really is running online (cloudBoot re-adds it).
+  document.body.classList.remove('cloud-on');
+
   // Restore autosave if no saved state injected
-  if (!window._SAVED_STATE) {
+  if (!window._SAVED_STATE && cloudAvailable()) {
+    cloudBoot();
+  } else if (!window._SAVED_STATE) {
     try {
       const saved = localStorage.getItem('austruss_autosave');
       if (saved) {
@@ -3031,6 +3245,678 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 });
+// ════════════════════════════════════════════════════
+// DATABASE (Supabase + R2 images via the Worker)
+// ════════════════════════════════════════════════════
+// Jobs live in the shared Austruss Supabase project, table `handovers`.
+// The table is closed to the public key; every call goes through a
+// handover_* function that checks the team passcode first. Images are
+// uploaded to R2 by the Worker (/api/images) and stored in `state` as
+// /images/<sha256>.<ext> URLs instead of base64.
+//
+// localStorage keeps its old role as a crash buffer (austruss_autosave),
+// plus: austruss_cloud_job  {id, version, dirty} — the open job
+//       austruss_passcode / austruss_editor — remembered sign-in
+const SUPABASE_URL = 'https://vrhapkrtbxcccmbnjkco.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_i-ed9yHRmRJWywa5PqEMuQ_INMTnrrl';
+const CLOUD_JOB_KEY = 'austruss_cloud_job';
+const PASSCODE_KEY = 'austruss_passcode';
+const EDITOR_KEY = 'austruss_editor';
+
+let cloudOn = false;
+let jobsCache = [];
+let formLoading = 0;        // >0 while code fills the form; autoSave ignores it
+let lastSavedJson = null;   // the open job as last saved, to skip no-op saves
+
+function cloudAvailable() {
+  // Only when served by the Worker (it provides /api/images). A saved HTML
+  // copy opened from disk keeps working the old, file-based way.
+  return location.protocol === 'https:' ||
+    ['localhost', '127.0.0.1'].includes(location.hostname);
+}
+
+function lsGet(key) { try { return localStorage.getItem(key); } catch(e) { return null; } }
+function lsSet(key, val) { try { val == null ? localStorage.removeItem(key) : localStorage.setItem(key, val); } catch(e) {} }
+
+function readCloudJob() {
+  try { return JSON.parse(lsGet(CLOUD_JOB_KEY)) || {}; } catch(e) { return {}; }
+}
+function writeCloudJob(job) { lsSet(CLOUD_JOB_KEY, job ? JSON.stringify(job) : null); }
+
+class CloudError extends Error {
+  constructor(message, status) { super(message); this.status = status; }
+}
+
+async function rpc(fn, args) {
+  let res;
+  try {
+    res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+      method: 'POST',
+      headers: { apikey: SUPABASE_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify(Object.assign({ p_passcode: lsGet(PASSCODE_KEY) }, args)),
+    });
+  } catch(e) {
+    throw new CloudError('No connection to the database', 0);
+  }
+  const text = await res.text();
+  let body = null;
+  try { body = text ? JSON.parse(text) : null; } catch(e) {}
+  if (!res.ok) throw new CloudError((body && body.message) || res.statusText, res.status);
+  return body;
+}
+
+function withDefaults(s) {
+  s = Object.assign({}, s);
+  ['links','contacts','buildings','variations','otherNotes','transportSelected','scopeImages','siteImages']
+    .forEach(k => { if (!Array.isArray(s[k])) s[k] = []; });
+  return s;
+}
+
+function setCloudStatus(text, isError) {
+  const el = document.getElementById('cloudStatus');
+  if (!el) return;
+  el.textContent = text;
+  el.classList.toggle('error', !!isError);
+}
+
+function fmtWhen(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const sameDay = d.toDateString() === new Date().toDateString();
+  return sameDay
+    ? d.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' })
+    : d.toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+// ── Passcode ───────────────────────────────────────
+let gateResolve = null;
+
+function showGate(message) {
+  document.getElementById('gateError').textContent = message || '';
+  document.getElementById('gateEditor').value = lsGet(EDITOR_KEY) || '';
+  document.getElementById('gateModal').classList.add('open');
+  setTimeout(() => document.getElementById('gatePasscode').focus(), 50);
+  return new Promise(resolve => { gateResolve = resolve; });
+}
+
+async function submitGate(e) {
+  e.preventDefault();
+  const pass = document.getElementById('gatePasscode').value;
+  const btn = document.getElementById('gateSubmit');
+  btn.disabled = true;
+  document.getElementById('gateError').textContent = '';
+  lsSet(PASSCODE_KEY, pass);
+  try {
+    await rpc('handover_check', {});
+  } catch(err) {
+    lsSet(PASSCODE_KEY, null);
+    document.getElementById('gateError').textContent =
+      err.status === 401 ? 'That passcode isn’t right.' : err.message;
+    btn.disabled = false;
+    return;
+  }
+  btn.disabled = false;
+  lsSet(EDITOR_KEY, document.getElementById('gateEditor').value.trim() || null);
+  document.getElementById('gatePasscode').value = '';
+  closeModal('gateModal');
+  if (gateResolve) { gateResolve(); gateResolve = null; }
+}
+
+// Runs fn; if the passcode was changed under us, asks again and retries once.
+async function withPasscode(fn) {
+  try {
+    return await fn();
+  } catch(err) {
+    if (err.status !== 401) throw err;
+    lsSet(PASSCODE_KEY, null);
+    await showGate('The team passcode has changed — enter the new one.');
+    return fn();
+  }
+}
+
+// ── Boot ───────────────────────────────────────────
+async function cloudBoot() {
+  cloudOn = true;
+  document.body.classList.add('cloud-on');
+  window.addEventListener('beforeunload', e => {
+    if (readCloudJob().dirty || cloudSaving) { e.preventDefault(); e.returnValue = ''; }
+  });
+
+  if (!lsGet(PASSCODE_KEY)) await showGate();
+  else {
+    try { await withPasscode(() => rpc('handover_check', {})); }
+    catch(err) { setCloudStatus('⚠ Offline — changes kept on this computer', true); }
+  }
+
+  const job = readCloudJob();
+  if (job.id) {
+    try { await openJob(job.id, { recover: job.dirty ? job : null }); return; }
+    catch(err) {
+      if (err.status !== 404) { setCloudStatus('⚠ Couldn’t load the open job', true); initFresh(); return; }
+      writeCloudJob(null);
+    }
+  }
+  // A browser autosave that never reached the database: offer it, as before.
+  let saved = null;
+  try { saved = JSON.parse(lsGet('austruss_autosave')); } catch(e) {}
+  if (saved && (saved.jobNumber || saved.projectName)) {
+    document.getElementById('restoreProjectName').textContent = saved.projectName || 'Unnamed Project';
+    document.getElementById('restoreSavedAt').textContent =
+      saved._savedAt ? new Date(saved._savedAt).toLocaleString('en-AU') : 'unknown time';
+    window._pendingRestore = saved;
+    document.getElementById('restoreModal').classList.add('open');
+    return;
+  }
+  initFresh();
+  openJobs();
+}
+
+// ── Open / list / delete ───────────────────────────
+async function openJob(id, opts) {
+  opts = opts || {};
+  if (!opts.recover && !(await flushCloudSave())) return;
+  // Read before touching the form: resetting it rewrites the local autosave.
+  let local = null;
+  if (opts.recover) { try { local = JSON.parse(lsGet('austruss_autosave')); } catch(e) {} }
+  setCloudStatus('Loading…');
+  const row = await withPasscode(() => rpc('handover_get', { p_id: id }));
+  let data = row.data;
+  let job = { id: row.id, version: row.version, dirty: false };
+  lastSavedJson = null;
+  if (local) {
+    // This browser had edits that never reached the database (closed while
+    // offline, say). Put them back over the saved job; the save that follows
+    // carries the old version, so it still stops if someone else saved since.
+    data = Object.assign({}, data, local);
+    job = { id: row.id, version: opts.recover.version, dirty: true };
+  }
+  formLoading++;
+  try {
+    resetFormFields();
+    state = withDefaults(data);
+    delete state._savedAt;
+    applyStateToForm();
+    collectFormData();
+  } finally { formLoading--; }
+  if (!job.dirty) lastSavedJson = cloudSnapshot();
+  writeCloudJob(job);
+  saveLocal();
+  closeModal('jobsModal');
+  if (job.dirty) {
+    showToast('↺ Recovered changes that hadn’t been saved');
+    scheduleCloudSave(0);
+  } else {
+    setCloudStatus('✓ Saved ' + fmtWhen(row.updated_at));
+  }
+  refreshFromSmartsheet();
+}
+
+async function openJobs() {
+  document.getElementById('jobsModal').classList.add('open');
+  document.getElementById('jobsList').innerHTML = '<div class="jobs-empty">Loading…</div>';
+  try {
+    jobsCache = await withPasscode(() => rpc('handover_list', {}));
+    renderJobs();
+  } catch(err) {
+    document.getElementById('jobsList').innerHTML =
+      `<div class="jobs-empty">Couldn’t load jobs: ${escHtml(err.message)}</div>`;
+  }
+}
+
+function renderJobs() {
+  const list = document.getElementById('jobsList');
+  const q = (document.getElementById('jobsFilter').value || '').trim().toLowerCase();
+  const current = readCloudJob().id;
+  const rows = jobsCache.filter(j => !q ||
+    [j.job_number, j.project_name, j.client_name].some(v => (v || '').toLowerCase().includes(q)));
+  if (!rows.length) {
+    list.innerHTML = `<div class="jobs-empty">${jobsCache.length
+      ? 'No jobs match that search.'
+      : 'No handovers in the database yet. Start a new one, or drop old session files (.json) here.'}</div>`;
+    return;
+  }
+  list.innerHTML = rows.map(j => `
+    <div class="job-row${j.id === current ? ' current' : ''}" onclick="openJobFromList('${j.id}')">
+      <div class="job-main">
+        <div class="job-title">${escHtml([j.job_number, j.project_name].filter(Boolean).join(' — ') || 'Unnamed job')}</div>
+        <div class="job-meta">${escHtml([
+          j.client_name,
+          'saved ' + fmtWhen(j.updated_at) + (j.updated_by ? ' by ' + j.updated_by : ''),
+          j.source === 'import' ? 'imported' : '',
+          j.id === current ? 'open now' : '',
+        ].filter(Boolean).join(' · '))}</div>
+      </div>
+      <button class="btn btn-red btn-sm" title="Delete this job" onclick="event.stopPropagation();deleteJob('${j.id}')">✕</button>
+    </div>`).join('');
+}
+
+async function openJobFromList(id) {
+  try { await openJob(id); }
+  catch(err) { showToast('❌ Couldn’t open that job: ' + err.message); setCloudStatus(''); }
+}
+
+async function deleteJob(id) {
+  const j = jobsCache.find(x => x.id === id) || {};
+  const name = [j.job_number, j.project_name].filter(Boolean).join(' — ') || 'this job';
+  if (!confirm(`Delete ${name} from the database?`)) return;
+  try {
+    await withPasscode(() => rpc('handover_delete', { p_id: id }));
+  } catch(err) { showToast('❌ Delete failed: ' + err.message); return; }
+  if (readCloudJob().id === id) {
+    writeCloudJob(null);
+    resetForm();
+    localStorage.removeItem('austruss_autosave');
+    initFresh();
+    setCloudStatus('');
+  }
+  jobsCache = jobsCache.filter(x => x.id !== id);
+  renderJobs();
+  showToast('🗑 Deleted ' + name);
+}
+
+// ── Saving ─────────────────────────────────────────
+let cloudTimer = null;
+let cloudSaving = null;     // promise of the save in flight
+let cloudEdits = 0;         // bumps on every edit, to spot edits made mid-save
+let cloudRetry = null;
+
+function scheduleCloudSave(delay) {
+  if (!cloudOn) return;
+  cloudEdits++;
+  const job = readCloudJob();
+  if (!job.dirty) writeCloudJob(Object.assign(job, { dirty: true }));
+  clearTimeout(cloudTimer);
+  clearTimeout(cloudRetry);
+  cloudTimer = setTimeout(cloudSaveNow, delay == null ? 1500 : delay);
+  setCloudStatus('Unsaved changes…');
+}
+
+// Saves now if anything is pending. Resolves false if the save failed.
+async function flushCloudSave() {
+  if (!cloudOn) return true;
+  if (cloudSaving) await cloudSaving;
+  if (!readCloudJob().dirty) return true;
+  await cloudSaveNow();
+  if (readCloudJob().dirty) {
+    return confirm('This job hasn’t saved to the database yet (see the status at the top). Carry on anyway? Its changes stay on this computer only.');
+  }
+  return true;
+}
+
+function cloudSaveNow() {
+  clearTimeout(cloudTimer);
+  if (cloudSaving) {
+    // Edits arrived mid-save; go again once this one lands.
+    return cloudSaving.then(() => readCloudJob().dirty && cloudSaveNow());
+  }
+  cloudSaving = doCloudSave().finally(() => { cloudSaving = null; });
+  return cloudSaving;
+}
+
+async function doCloudSave() {
+  collectFormData();
+  const job = readCloudJob();
+  if (!job.dirty) return;
+  // Don't create a database row for a form nobody has started filling in.
+  if (!job.id && !(state.jobNumber || '').trim() && !(state.projectName || '').trim()) {
+    writeCloudJob(Object.assign(job, { dirty: false }));
+    setCloudStatus('Add a job number to save');
+    return;
+  }
+  const editsAtStart = cloudEdits;
+  setCloudStatus('Saving…');
+  try {
+    await withPasscode(() => uploadImagesIn(state));
+    const snapshot = cloudSnapshot();
+    if (job.id && snapshot === lastSavedJson) {
+      // Nothing actually changed (a field lost focus, say): don't bump the
+      // version or put this person's name on the job.
+      writeCloudJob(Object.assign(job, { dirty: cloudEdits !== editsAtStart }));
+      setCloudStatus('✓ Saved');
+      return;
+    }
+    const data = JSON.parse(snapshot);
+    const r = await withPasscode(() => rpc('handover_save', {
+      p_id: job.id || null, p_version: job.version || null,
+      p_data: data, p_editor: lsGet(EDITOR_KEY),
+    }));
+    writeCloudJob({ id: r.id, version: r.version, dirty: cloudEdits !== editsAtStart });
+    lastSavedJson = snapshot;
+    saveLocal();
+    setCloudStatus('✓ Saved ' + fmtWhen(r.updated_at));
+  } catch(err) {
+    if (err.status === 409) { showConflict(job.id); return; }
+    setCloudStatus('⚠ Not saved — ' + (err.status === 0 ? 'offline, retrying' : err.message), true);
+    cloudRetry = setTimeout(cloudSaveNow, 15000);
+  }
+}
+
+async function showConflict(id) {
+  setCloudStatus('⚠ Save clash — choose a version', true);
+  let who = 'Another person';
+  try {
+    const list = await rpc('handover_list', {});
+    const j = list.find(x => x.id === id);
+    if (j && j.updated_by) who = j.updated_by;
+  } catch(e) {}
+  document.getElementById('conflictWho').textContent = who;
+  document.getElementById('conflictModal').classList.add('open');
+}
+
+async function resolveConflict(choice) {
+  closeModal('conflictModal');
+  const job = readCloudJob();
+  if (choice === 'theirs') {
+    writeCloudJob(Object.assign(job, { dirty: false }));
+    try { await openJob(job.id); } catch(err) { showToast('❌ ' + err.message); }
+    return;
+  }
+  try {
+    const row = await rpc('handover_get', { p_id: job.id });
+    writeCloudJob({ id: job.id, version: row.version, dirty: true });
+    await cloudSaveNow();
+  } catch(err) { showToast('❌ ' + err.message); }
+}
+
+function cloudSnapshot() {
+  const data = Object.assign({}, state);
+  delete data._savedAt;
+  return JSON.stringify(data);
+}
+
+// ── Images ─────────────────────────────────────────
+const IMAGE_EXT = { png:'png', jpeg:'jpg', jpg:'jpg', gif:'gif', webp:'webp', bmp:'bmp', 'svg+xml':'svg' };
+
+async function sha256Hex(bytes) {
+  const d = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(d)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function uploadDataUrl(dataUrl) {
+  const m = /^data:image\/([a-z0-9.+-]+);base64,/i.exec(dataUrl);
+  const ext = m && IMAGE_EXT[m[1].toLowerCase()];
+  if (!ext) return dataUrl;                  // unusual format: leave it inline
+  const bin = atob(dataUrl.slice(m[0].length));
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const key = (await sha256Hex(bytes)) + '.' + ext;
+  let res;
+  try {
+    res = await fetch('/api/images/' + key, {
+      method: 'PUT', body: bytes,
+      headers: { 'X-Handover-Passcode': lsGet(PASSCODE_KEY) || '' },
+    });
+  } catch(e) { throw new CloudError('No connection to the image store', 0); }
+  if (!res.ok) throw new CloudError('Image upload failed (' + (await res.text()) + ')', res.status);
+  return '/images/' + key;
+}
+
+// Replaces every base64 image anywhere in obj with its R2 URL, in place.
+async function uploadImagesIn(obj) {
+  for (const k of Object.keys(obj)) {
+    const v = obj[k];
+    if (typeof v === 'string' && v.startsWith('data:image/')) obj[k] = await uploadDataUrl(v);
+    else if (v && typeof v === 'object') await uploadImagesIn(v);
+  }
+}
+
+// Downloaded copies (Save HTML / Save Locked) are opened from disk, so they
+// need full URLs to reach the images.
+function absoluteImageUrls(html) {
+  if (!/^https?:$/.test(location.protocol)) return html;
+  return html.replace(/(["'(])\/images\//g, '$1' + location.origin + '/images/');
+}
+
+// ── Import old session files ───────────────────────
+const SAVED_STATE_RE = /window\._SAVED_STATE=([\s\S]*?);<\/script><!--AUSTRUSS_STATE_END-->/;
+
+function parseHandoverFile(name, text) {
+  let data;
+  if (/\.html?$/i.test(name)) {
+    const m = SAVED_STATE_RE.exec(text);
+    if (!m) throw new Error('no saved job inside (is it a blank or locked copy?)');
+    data = JSON.parse(m[1]);
+  } else {
+    data = JSON.parse(text);
+  }
+  const looksRight = data && typeof data === 'object' && !Array.isArray(data) &&
+    ['jobNumber','projectName','clientName','buildings','links','contacts','scopeImages'].some(k => k in data);
+  if (!looksRight) throw new Error('not a handover session file');
+  return data;
+}
+
+async function importFiles(fileList, opts) {
+  opts = opts || {};
+  const files = Array.from(fileList).filter(f => /\.(json|html?)$/i.test(f.name));
+  const out = document.getElementById('importResults');
+  document.getElementById('jobsModal').classList.add('open');
+  if (!files.length) { out.innerHTML = '<div>No .json or .html files found.</div>'; return; }
+  out.innerHTML = '';
+  const line = html => { const d = document.createElement('div'); d.innerHTML = html; out.appendChild(d); return d; };
+  const head = line(`<strong>Importing ${files.length} file${files.length > 1 ? 's' : ''}…</strong>`);
+  let added = 0, dupes = 0, failed = 0, lastId = null;
+
+  for (const f of files) {
+    const row = line(`⏳ ${escHtml(f.name)}`);
+    try {
+      const text = await f.text();
+      const data = withDefaults(parseHandoverFile(f.name, text));
+      const hash = await sha256Hex(new TextEncoder().encode(text));
+      const savedAt = data._savedAt || new Date(f.lastModified || Date.now()).toISOString();
+      delete data._savedAt;
+      await withPasscode(() => uploadImagesIn(data));
+      const r = await withPasscode(() => rpc('handover_import', {
+        p_hash: hash, p_data: data, p_saved_at: savedAt, p_editor: lsGet(EDITOR_KEY),
+      }));
+      lastId = r.id;
+      const label = escHtml([data.jobNumber, data.projectName].filter(Boolean).join(' — ') || f.name);
+      if (r.created) { added++; row.innerHTML = `✅ ${label}`; }
+      else { dupes++; row.innerHTML = `↩ ${label} <span style="color:var(--muted)">— already imported</span>`; }
+    } catch(err) {
+      failed++;
+      row.innerHTML = `❌ ${escHtml(f.name)} <span style="color:var(--muted)">— ${escHtml(err.message)}</span>`;
+    }
+  }
+  head.innerHTML = `<strong>Done: ${added} added, ${dupes} already there, ${failed} couldn’t be read.</strong>`;
+  try { jobsCache = await rpc('handover_list', {}); renderJobs(); } catch(e) {}
+  if (opts.open && files.length === 1 && lastId) {
+    try { await openJob(lastId); showToast('✅ Session loaded into the database'); }
+    catch(err) { showToast('❌ ' + err.message); }
+  }
+}
+// ── Job details from Smartsheet (Project Admin) ────
+// The job is picked from the Project Admin sheet (via the Worker, which
+// holds the Smartsheet token) and its number, name, client and address
+// are then read-only, so the handover always matches Smartsheet.
+//   state.ssLinked  true = picked from Smartsheet, 'unlisted' = typed by
+//                   hand on purpose, undefined = older job, not linked yet
+//   state.ssFields  which fields Smartsheet filled (and so are locked);
+//                   a field the sheet left blank stays editable
+const SS_FIELDS = {
+  jobNumber:   p => p.number,
+  projectName: p => p.name || p.title,
+  clientName:  p => p.client,
+  siteAddress: p => [p.street, [p.suburb, p.state, p.postcode].filter(Boolean).join(' ')].filter(Boolean).join(', '),
+  cityTown:    p => [p.suburb, p.state].filter(Boolean).join(' '),
+};
+// Project Admin's Sector → the form's Building Type, where they line up.
+// Only ever fills an empty Building Type; it stays editable.
+const SECTOR_TO_BUILDING = {
+  Residential: 'Residential', Commercial: 'Commercial', Education: 'Education',
+  Health: 'Healthcare', 'Aged Care': 'Healthcare', Defence: 'Defence',
+};
+
+let ssProjects = null;       // cached list for this page load
+let ssLoading = null;
+
+async function loadSsProjects(force) {
+  if (ssProjects && !force) return ssProjects;
+  if (ssLoading) return ssLoading;
+  ssLoading = withPasscode(async () => {
+    let res;
+    try {
+      res = await fetch('/api/projects', { headers: { 'X-Handover-Passcode': lsGet(PASSCODE_KEY) || '' } });
+    } catch(e) { throw new CloudError('No connection to Smartsheet', 0); }
+    if (!res.ok) {
+      let msg = res.statusText;
+      try { msg = (await res.json()).error || msg; } catch(e) {}
+      throw new CloudError(msg, res.status);
+    }
+    return (await res.json()).projects;
+  }).then(list => (ssProjects = list)).finally(() => { ssLoading = null; });
+  return ssLoading;
+}
+
+function updateSsLocks() {
+  const linked = cloudOn && state.ssLinked === true;
+  const locked = linked ? (state.ssFields || []) : [];
+  Object.keys(SS_FIELDS).forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const on = locked.includes(id);
+    el.readOnly = on;
+    el.classList.toggle('ss-locked', on);
+    el.title = on ? 'From Smartsheet (Project Admin) — change it there' : '';
+  });
+  // The job number is only typed by hand for a job that isn't in Smartsheet.
+  const jn = document.getElementById('jobNumber');
+  if (jn && cloudOn && state.ssLinked !== 'unlisted') {
+    jn.readOnly = true;
+    jn.onclick = () => openJobPicker();
+  } else if (jn) {
+    jn.onclick = null;
+  }
+  const btn = document.getElementById('jobPickBtn');
+  if (btn) btn.textContent = linked ? '🔄 Change job' : '🔍 Pick job';
+  const tag = document.getElementById('ssTag');
+  if (tag) tag.textContent = !cloudOn ? '' : linked ? '✓ Smartsheet' : (state.ssLinked === 'unlisted' ? 'Not in Smartsheet' : '');
+}
+
+async function openJobPicker() {
+  document.getElementById('pickFilter').value = '';
+  document.getElementById('pickModal').classList.add('open');
+  document.getElementById('pickList').innerHTML = '<div class="jobs-empty">Loading jobs from Smartsheet…</div>';
+  setTimeout(() => document.getElementById('pickFilter').focus(), 50);
+  try {
+    await loadSsProjects();
+    renderPick();
+  } catch(err) {
+    document.getElementById('pickList').innerHTML =
+      `<div class="jobs-empty">Couldn’t load jobs from Smartsheet: ${escHtml(err.message)}.<br>` +
+      `Use “Job isn’t in Smartsheet” to type the details in for now.</div>`;
+  }
+}
+
+function renderPick() {
+  if (!ssProjects) return;
+  const q = (document.getElementById('pickFilter').value || '').trim().toLowerCase();
+  const active = p => p.stage !== 'Complete';
+  // Empty search shows live jobs; searching also reaches completed ones.
+  let rows = ssProjects.filter(p => q
+    ? [p.number, p.name, p.title, p.client, p.suburb].some(v => (v || '').toLowerCase().includes(q))
+    : active(p));
+  rows.sort((a, b) => (active(b) - active(a)) ||
+    b.number.localeCompare(a.number, undefined, { numeric: true }));   // numbers can carry letters: 22095A
+  const total = rows.length;
+  rows = rows.slice(0, 150);
+  const list = document.getElementById('pickList');
+  if (!rows.length) {
+    list.innerHTML = '<div class="jobs-empty">No Smartsheet jobs match that search.</div>';
+    return;
+  }
+  list.innerHTML = rows.map(p => `
+    <div class="job-row" onclick="pickJob('${escHtml(p.number)}')">
+      <div class="job-main">
+        <div class="job-title">${escHtml([p.number, p.name || p.title].filter(Boolean).join(' — '))}</div>
+        <div class="job-meta">${escHtml([
+          p.client,
+          [p.suburb, p.state].filter(Boolean).join(' '),
+          p.stage,
+        ].filter(Boolean).join(' · '))}</div>
+      </div>
+    </div>`).join('') +
+    (total > rows.length ? `<div class="jobs-empty">${total - rows.length} more — refine the search.</div>` : '');
+}
+
+async function pickJob(number) {
+  const p = (ssProjects || []).find(x => x.number === number);
+  if (!p) return;
+  const current = readCloudJob().id;
+
+  // One handover per job: if this job already has one, go to it instead.
+  try {
+    const list = await rpc('handover_list', {});
+    const existing = list.find(j => j.job_number === number && j.id !== current);
+    if (existing) {
+      if (confirm(`Job ${number} already has a handover (saved ${fmtWhen(existing.updated_at)}${existing.updated_by ? ' by ' + existing.updated_by : ''}). Open that one?`)) {
+        closeModal('pickModal');
+        await openJob(existing.id);
+      }
+      return;
+    }
+  } catch(e) { /* offline: let them carry on */ }
+
+  const had = (document.getElementById('jobNumber').value || '').trim();
+  if (had && had !== number &&
+      !confirm(`Change this handover from job ${had} to ${number}? Its number, name, client and address will be replaced from Smartsheet.`)) return;
+
+  applySsProject(p, { switching: !!had && had !== number });
+  closeModal('pickModal');
+  showToast('✅ ' + [p.number, p.name || p.title].filter(Boolean).join(' — '));
+}
+
+// Writes the Smartsheet values into the form. Returns true if anything changed.
+// switching: the handover is moving to a different job, so anything the old
+// job filled in goes, rather than lingering as an editable, wrong value.
+function applySsProject(p, opts) {
+  const switching = opts && opts.switching;
+  const previous = state.ssLinked === true ? (state.ssFields || []) : [];
+  let changed = state.ssLinked !== true;
+  const fields = [];
+  Object.entries(SS_FIELDS).forEach(([id, get]) => {
+    const el = document.getElementById(id);
+    const v = (get(p) || '').trim();
+    if (!v) {
+      // Sheet blank: the drafter fills it in. Clear it if Smartsheet (or the
+      // job being replaced) put the current value there.
+      if (el && el.value && (previous.includes(id) || switching)) { el.value = ''; changed = true; }
+      return;
+    }
+    fields.push(id);
+    if (el && el.value !== v) { el.value = v; changed = true; }
+  });
+  const bt = document.getElementById('buildingType');
+  const mapped = SECTOR_TO_BUILDING[p.sector] || '';
+  if (bt && (switching ? bt.value !== mapped : (!bt.value && mapped))) { bt.value = mapped; changed = true; }
+  if ((state.ssFields || []).join() !== fields.join()) changed = true;
+  state.ssLinked = true;
+  state.ssFields = fields;
+  document.getElementById('projectNameDisplay').textContent =
+    document.getElementById('projectName').value || 'New Project';
+  updateSsLocks();
+  if (changed) autoSave();
+  return changed;
+}
+
+function pickUnlisted() {
+  closeModal('pickModal');
+  state.ssLinked = 'unlisted';
+  state.ssFields = [];
+  updateSsLocks();
+  autoSave();
+  const jn = document.getElementById('jobNumber');
+  jn.focus();
+  showToast('✏ Type the job details in — this job isn’t linked to Smartsheet');
+}
+
+// On opening a linked job, pick up anything changed in Smartsheet since.
+async function refreshFromSmartsheet() {
+  if (state.ssLinked !== true || !state.jobNumber) return;
+  try {
+    const p = (await loadSsProjects()).find(x => x.number === state.jobNumber);
+    if (p && applySsProject(p)) showToast('🔄 Job details updated from Smartsheet');
+  } catch(e) { /* Smartsheet unreachable: keep what was saved */ }
+}
 </script>
 </body>
 </html>
