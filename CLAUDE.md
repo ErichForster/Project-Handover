@@ -14,6 +14,22 @@ Supabase behind a shared team passcode; images go to Cloudflare R2.
 - `supabase/migrations/` — the `handovers` table and `handover_*` functions,
   applied to the shared project `vrhapkrtbxcccmbnjkco`.
 
+## Job details from Smartsheet
+
+- Every handover starts by picking its job from Smartsheet **Project Admin**
+  (sheet `2922076222476164`, Company > Admin), where job numbers are issued.
+  `GET /api/projects` in `worker.js` reads 11 columns (by column id) with the
+  `SMARTSHEET_TOKEN` Worker secret, drops quotes/lost bids, overhead codes
+  (region `AUSTRUSS`, sector `(Internal)`) and duplicates, and strips the
+  `.0` Smartsheet puts on numbers. Job numbers can carry letters (`22095A`).
+- Job number, project name, client, site address and city/town are then
+  read-only (`state.ssLinked`, `state.ssFields`). A field the sheet leaves
+  blank stays editable. Building Type is pre-filled from Sector, editable.
+- "Job isn't in Smartsheet" sets `state.ssLinked = 'unlisted'` and unlocks
+  everything. Older handovers (no `ssLinked`) keep their values until someone
+  picks the job.
+- The "Project & Zone" sheet was considered and rejected: it has no address.
+
 ## Data model
 
 - `public.handovers` holds one row per job; `data` is the app's whole `state`

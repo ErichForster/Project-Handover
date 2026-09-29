@@ -2,11 +2,13 @@
 //
 //   PUT /api/images/<sha256>.<ext>   upload (needs the team passcode)
 //   GET /images/<sha256>.<ext>       download
+//   GET /api/projects                job list from Smartsheet (needs the passcode)
 //
 // Images are content-addressed (the key is the SHA-256 of the bytes), so an
 // upload can be retried or repeated safely and a URL never changes meaning.
 // Job data itself lives in Supabase; the passcode is checked there too, via
-// the handover_check function, so this Worker holds no secrets.
+// the handover_check function. The one secret is SMARTSHEET_TOKEN, used
+// read-only for the Project Admin sheet.
 
 const IMAGE_KEY = /^[0-9a-f]{64}\.(png|jpg|jpeg|gif|webp|bmp|svg)$/;
 const MAX_BYTES = 25 * 1024 * 1024;
@@ -31,6 +33,13 @@ export default {
         return new Response("Method not allowed", { status: 405, headers: { Allow: "PUT" } });
       }
       return putImage(request, env, key);
+    }
+
+    if (url.pathname === "/api/projects") {
+      if (request.method !== "GET") {
+        return new Response("Method not allowed", { status: 405, headers: { Allow: "GET" } });
+      }
+      return getProjects(request, env);
     }
 
     if (url.pathname.startsWith("/images/")) {
@@ -98,4 +107,83 @@ async function passcodeOk(passcode, env) {
   if (!res.ok) return false;
   accepted.set(passcode, Date.now());
   return true;
+}
+
+// ── Smartsheet job list ─────────────────────────────
+// The "Project Admin" sheet (Company > Admin) is where every Austruss job
+// number is issued, so it is the source for the handover's job details.
+// Smartsheet sends no CORS headers and the token must stay server-side,
+// hence this hop. Only these columns are ever read.
+const PROJECT_ADMIN_SHEET = "2922076222476164";
+const COLUMNS = {
+  number:   "559574310408068",  // Project Number
+  stage:    "972957946957700",  // Stage
+  name:     "1205141408534404", // Austruss Project Name
+  title:    "7805527736143748", // Project Title
+  client:   "2176028201930628", // Client
+  sector:   "6723142614470532", // Sector
+  region:   "4406843758563204", // Region
+  street:   "7437657224204164", // Street No. and Name
+  suburb:   "6341525487177604", // Suburb
+  state:    "3635459390394244", // State
+  postcode: "4396122446450564", // Post Code
+};
+// Quotes and lost bids never get a handover; completed jobs stay so old
+// handovers can still be linked.
+const HANDOVER_STAGES = new Set(["In Progress", "To Be Converted", "Complete"]);
+// Overhead codes (training, meetings, stock, R&D) and prospective projects.
+const NON_JOB_REGIONS = new Set(["AUSTRUSS", "(prospective projects)"]);
+// What the sheet's own lookups leave behind when they can't resolve.
+const UNRESOLVED = new Set(["*CLIENT NOT LISTED*", "PROJECT NOT FOUND", "#NO MATCH"]);
+const PROJECTS_TTL = 300; // seconds; the list changes a few times a day
+
+async function getProjects(request, env) {
+  if (!(await passcodeOk(request.headers.get("X-Handover-Passcode"), env))) {
+    return new Response("Wrong passcode", { status: 401 });
+  }
+  if (!env.SMARTSHEET_TOKEN) {
+    return Response.json({ error: "Smartsheet isn't connected yet (SMARTSHEET_TOKEN not set)" }, { status: 503 });
+  }
+
+  const cacheKey = new Request("https://austruss-handover.internal/projects-v1");
+  const cache = caches.default;
+  const hit = await cache.match(cacheKey);
+  if (hit) return hit;
+
+  const res = await fetch(
+    `https://api.smartsheet.com/2.0/sheets/${PROJECT_ADMIN_SHEET}?columnIds=${Object.values(COLUMNS).join(",")}`,
+    { headers: { Authorization: "Bearer " + env.SMARTSHEET_TOKEN } },
+  );
+  if (!res.ok) {
+    return Response.json({ error: `Smartsheet said ${res.status}` }, { status: 502 });
+  }
+  const sheet = await res.json();
+
+  const byId = Object.fromEntries(Object.entries(COLUMNS).map(([k, id]) => [id, k]));
+  const seen = new Set();
+  const projects = [];
+  for (const row of sheet.rows || []) {
+    const p = {};
+    for (const cell of row.cells || []) {
+      const key = byId[String(cell.columnId)];
+      if (!key) continue;
+      let v = cell.displayValue ?? cell.value;
+      v = v == null ? "" : String(v).trim();
+      if (UNRESOLVED.has(v)) v = "";
+      p[key] = v;
+    }
+    // "25177.0" -> "25177": numbers come back with a decimal tail.
+    p.number = (p.number || "").replace(/\.0+$/, "");
+    p.postcode = (p.postcode || "").replace(/\.0+$/, "");
+    if (!p.number || !HANDOVER_STAGES.has(p.stage) || NON_JOB_REGIONS.has(p.region)) continue;
+    if (p.sector === "(Internal)" || seen.has(p.number)) continue;
+    seen.add(p.number);
+    projects.push(p);
+  }
+
+  const out = Response.json({ fetchedAt: new Date().toISOString(), projects }, {
+    headers: { "Cache-Control": `max-age=${PROJECTS_TTL}` },
+  });
+  await cache.put(cacheKey, out.clone());
+  return out;
 }

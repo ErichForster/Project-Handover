@@ -359,10 +359,20 @@
   .modal-box p  { font-size: 13px; color: var(--muted); margin-bottom: 18px; }
   .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
   #conflictModal { z-index: 250; }
+  #pickModal { z-index: 220; }
   #gateModal { z-index: 300; }
 
   /* ── DATABASE (jobs list, passcode, save status) ── */
   body:not(.cloud-on) .cloud-only { display: none !important; }
+  /* Job details that come from Smartsheet (Project Admin) are read-only. */
+  .form-grid input.ss-locked {
+    background: #f3efea; color: var(--text); cursor: default;
+    border-color: #e2d6c8; border-style: dashed;
+  }
+  .job-pick { gap: 8px; }
+  .job-pick .btn { flex-shrink: 0; }
+  .job-pick input[readonly] { cursor: pointer; }
+  .ss-tag { font-size: 11px; font-weight: 600; color: var(--muted); white-space: nowrap; }
   .cloud-pill {
     font-size: 12px; font-weight: 500; color: rgba(255,255,255,.75);
     white-space: nowrap; align-self: center; padding: 0 4px;
@@ -785,7 +795,11 @@
         </div>
         <div class="form-row">
           <label>Austruss Job Number</label>
-          <div class="field-wrap"><input type="text" id="jobNumber" placeholder="e.g. AUS-2026-001" onchange="autoSave()"></div>
+          <div class="field-wrap job-pick">
+            <input type="text" id="jobNumber" placeholder="e.g. AUS-2026-001" onchange="autoSave()">
+            <button class="btn btn-amber btn-sm cloud-only" id="jobPickBtn" onclick="openJobPicker()">🔍 Pick job</button>
+            <span class="ss-tag cloud-only" id="ssTag"></span>
+          </div>
         </div>
         <div class="form-row">
           <label>Austruss Project Name</label>
@@ -1237,6 +1251,22 @@
     <p style="margin:12px 0 0;font-size:12px">Tip: drop old session files (.json) onto the list to add them.</p>
     <div class="modal-actions" style="margin-top:12px">
       <button class="btn btn-outline" style="color:var(--navy);border-color:var(--border)" id="jobsClose" onclick="closeModal('jobsModal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: pick the job from Smartsheet -->
+<div class="modal-overlay" id="pickModal">
+  <div class="modal-box wide">
+    <h3>🔍 Pick the job</h3>
+    <p style="margin-bottom:12px">Jobs from Smartsheet → Project Admin. Search to include completed jobs.</p>
+    <div class="jobs-toolbar">
+      <input class="field" type="search" id="pickFilter" placeholder="Search job number, name, client or suburb…" oninput="renderPick()">
+    </div>
+    <div class="jobs-list" id="pickList"></div>
+    <div class="modal-actions" style="margin-top:12px;justify-content:space-between;flex-wrap:wrap">
+      <button class="btn btn-outline" style="color:var(--navy);border-color:var(--border)" onclick="pickUnlisted()" title="Type the details in by hand">Job isn’t in Smartsheet</button>
+      <button class="btn btn-outline" style="color:var(--navy);border-color:var(--border)" onclick="closeModal('pickModal')">Cancel</button>
     </div>
   </div>
 </div>
@@ -2043,6 +2073,7 @@ function applyStateToForm() {
   renderOtherNotes();
   restoreMap();
   updateScopeProgress();
+  updateSsLocks();
 }
 
 // ════════════════════════════════════════════════════
@@ -2117,6 +2148,8 @@ async function newProject() {
   closeModal('jobsModal');
   initFresh();
   showToast('✨ New project started');
+  // Every new handover starts by choosing its job from Smartsheet.
+  if (cloudOn) openJobPicker();
 }
 
 function resetForm() {
@@ -2145,6 +2178,7 @@ function resetFormFields() {
   document.getElementById('projectNameDisplay').textContent = 'New Project';
   renderImages('scopeImages');
   renderImages('siteImages');
+  updateSsLocks();
 }
 
 function saveSession() {
@@ -3374,6 +3408,7 @@ async function openJob(id, opts) {
   } else {
     setCloudStatus('✓ Saved ' + fmtWhen(row.updated_at));
   }
+  refreshFromSmartsheet();
 }
 
 async function openJobs() {
@@ -3648,6 +3683,199 @@ async function importFiles(fileList, opts) {
     try { await openJob(lastId); showToast('✅ Session loaded into the database'); }
     catch(err) { showToast('❌ ' + err.message); }
   }
+}
+// ── Job details from Smartsheet (Project Admin) ────
+// The job is picked from the Project Admin sheet (via the Worker, which
+// holds the Smartsheet token) and its number, name, client and address
+// are then read-only, so the handover always matches Smartsheet.
+//   state.ssLinked  true = picked from Smartsheet, 'unlisted' = typed by
+//                   hand on purpose, undefined = older job, not linked yet
+//   state.ssFields  which fields Smartsheet filled (and so are locked);
+//                   a field the sheet left blank stays editable
+const SS_FIELDS = {
+  jobNumber:   p => p.number,
+  projectName: p => p.name || p.title,
+  clientName:  p => p.client,
+  siteAddress: p => [p.street, [p.suburb, p.state, p.postcode].filter(Boolean).join(' ')].filter(Boolean).join(', '),
+  cityTown:    p => [p.suburb, p.state].filter(Boolean).join(' '),
+};
+// Project Admin's Sector → the form's Building Type, where they line up.
+// Only ever fills an empty Building Type; it stays editable.
+const SECTOR_TO_BUILDING = {
+  Residential: 'Residential', Commercial: 'Commercial', Education: 'Education',
+  Health: 'Healthcare', 'Aged Care': 'Healthcare', Defence: 'Defence',
+};
+
+let ssProjects = null;       // cached list for this page load
+let ssLoading = null;
+
+async function loadSsProjects(force) {
+  if (ssProjects && !force) return ssProjects;
+  if (ssLoading) return ssLoading;
+  ssLoading = withPasscode(async () => {
+    let res;
+    try {
+      res = await fetch('/api/projects', { headers: { 'X-Handover-Passcode': lsGet(PASSCODE_KEY) || '' } });
+    } catch(e) { throw new CloudError('No connection to Smartsheet', 0); }
+    if (!res.ok) {
+      let msg = res.statusText;
+      try { msg = (await res.json()).error || msg; } catch(e) {}
+      throw new CloudError(msg, res.status);
+    }
+    return (await res.json()).projects;
+  }).then(list => (ssProjects = list)).finally(() => { ssLoading = null; });
+  return ssLoading;
+}
+
+function updateSsLocks() {
+  const linked = cloudOn && state.ssLinked === true;
+  const locked = linked ? (state.ssFields || []) : [];
+  Object.keys(SS_FIELDS).forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const on = locked.includes(id);
+    el.readOnly = on;
+    el.classList.toggle('ss-locked', on);
+    el.title = on ? 'From Smartsheet (Project Admin) — change it there' : '';
+  });
+  // The job number is only typed by hand for a job that isn't in Smartsheet.
+  const jn = document.getElementById('jobNumber');
+  if (jn && cloudOn && state.ssLinked !== 'unlisted') {
+    jn.readOnly = true;
+    jn.onclick = () => openJobPicker();
+  } else if (jn) {
+    jn.onclick = null;
+  }
+  const btn = document.getElementById('jobPickBtn');
+  if (btn) btn.textContent = linked ? '🔄 Change job' : '🔍 Pick job';
+  const tag = document.getElementById('ssTag');
+  if (tag) tag.textContent = !cloudOn ? '' : linked ? '✓ Smartsheet' : (state.ssLinked === 'unlisted' ? 'Not in Smartsheet' : '');
+}
+
+async function openJobPicker() {
+  document.getElementById('pickFilter').value = '';
+  document.getElementById('pickModal').classList.add('open');
+  document.getElementById('pickList').innerHTML = '<div class="jobs-empty">Loading jobs from Smartsheet…</div>';
+  setTimeout(() => document.getElementById('pickFilter').focus(), 50);
+  try {
+    await loadSsProjects();
+    renderPick();
+  } catch(err) {
+    document.getElementById('pickList').innerHTML =
+      `<div class="jobs-empty">Couldn’t load jobs from Smartsheet: ${escHtml(err.message)}.<br>` +
+      `Use “Job isn’t in Smartsheet” to type the details in for now.</div>`;
+  }
+}
+
+function renderPick() {
+  if (!ssProjects) return;
+  const q = (document.getElementById('pickFilter').value || '').trim().toLowerCase();
+  const active = p => p.stage !== 'Complete';
+  // Empty search shows live jobs; searching also reaches completed ones.
+  let rows = ssProjects.filter(p => q
+    ? [p.number, p.name, p.title, p.client, p.suburb].some(v => (v || '').toLowerCase().includes(q))
+    : active(p));
+  rows.sort((a, b) => (active(b) - active(a)) ||
+    b.number.localeCompare(a.number, undefined, { numeric: true }));   // numbers can carry letters: 22095A
+  const total = rows.length;
+  rows = rows.slice(0, 150);
+  const list = document.getElementById('pickList');
+  if (!rows.length) {
+    list.innerHTML = '<div class="jobs-empty">No Smartsheet jobs match that search.</div>';
+    return;
+  }
+  list.innerHTML = rows.map(p => `
+    <div class="job-row" onclick="pickJob('${escHtml(p.number)}')">
+      <div class="job-main">
+        <div class="job-title">${escHtml([p.number, p.name || p.title].filter(Boolean).join(' — '))}</div>
+        <div class="job-meta">${escHtml([
+          p.client,
+          [p.suburb, p.state].filter(Boolean).join(' '),
+          p.stage,
+        ].filter(Boolean).join(' · '))}</div>
+      </div>
+    </div>`).join('') +
+    (total > rows.length ? `<div class="jobs-empty">${total - rows.length} more — refine the search.</div>` : '');
+}
+
+async function pickJob(number) {
+  const p = (ssProjects || []).find(x => x.number === number);
+  if (!p) return;
+  const current = readCloudJob().id;
+
+  // One handover per job: if this job already has one, go to it instead.
+  try {
+    const list = await rpc('handover_list', {});
+    const existing = list.find(j => j.job_number === number && j.id !== current);
+    if (existing) {
+      if (confirm(`Job ${number} already has a handover (saved ${fmtWhen(existing.updated_at)}${existing.updated_by ? ' by ' + existing.updated_by : ''}). Open that one?`)) {
+        closeModal('pickModal');
+        await openJob(existing.id);
+      }
+      return;
+    }
+  } catch(e) { /* offline: let them carry on */ }
+
+  const had = (document.getElementById('jobNumber').value || '').trim();
+  if (had && had !== number &&
+      !confirm(`Change this handover from job ${had} to ${number}? Its number, name, client and address will be replaced from Smartsheet.`)) return;
+
+  applySsProject(p, { switching: !!had && had !== number });
+  closeModal('pickModal');
+  showToast('✅ ' + [p.number, p.name || p.title].filter(Boolean).join(' — '));
+}
+
+// Writes the Smartsheet values into the form. Returns true if anything changed.
+// switching: the handover is moving to a different job, so anything the old
+// job filled in goes, rather than lingering as an editable, wrong value.
+function applySsProject(p, opts) {
+  const switching = opts && opts.switching;
+  const previous = state.ssLinked === true ? (state.ssFields || []) : [];
+  let changed = state.ssLinked !== true;
+  const fields = [];
+  Object.entries(SS_FIELDS).forEach(([id, get]) => {
+    const el = document.getElementById(id);
+    const v = (get(p) || '').trim();
+    if (!v) {
+      // Sheet blank: the drafter fills it in. Clear it if Smartsheet (or the
+      // job being replaced) put the current value there.
+      if (el && el.value && (previous.includes(id) || switching)) { el.value = ''; changed = true; }
+      return;
+    }
+    fields.push(id);
+    if (el && el.value !== v) { el.value = v; changed = true; }
+  });
+  const bt = document.getElementById('buildingType');
+  const mapped = SECTOR_TO_BUILDING[p.sector] || '';
+  if (bt && (switching ? bt.value !== mapped : (!bt.value && mapped))) { bt.value = mapped; changed = true; }
+  if ((state.ssFields || []).join() !== fields.join()) changed = true;
+  state.ssLinked = true;
+  state.ssFields = fields;
+  document.getElementById('projectNameDisplay').textContent =
+    document.getElementById('projectName').value || 'New Project';
+  updateSsLocks();
+  if (changed) autoSave();
+  return changed;
+}
+
+function pickUnlisted() {
+  closeModal('pickModal');
+  state.ssLinked = 'unlisted';
+  state.ssFields = [];
+  updateSsLocks();
+  autoSave();
+  const jn = document.getElementById('jobNumber');
+  jn.focus();
+  showToast('✏ Type the job details in — this job isn’t linked to Smartsheet');
+}
+
+// On opening a linked job, pick up anything changed in Smartsheet since.
+async function refreshFromSmartsheet() {
+  if (state.ssLinked !== true || !state.jobNumber) return;
+  try {
+    const p = (await loadSsProjects()).find(x => x.number === state.jobNumber);
+    if (p && applySsProject(p)) showToast('🔄 Job details updated from Smartsheet');
+  } catch(e) { /* Smartsheet unreachable: keep what was saved */ }
 }
 </script>
 </body>
