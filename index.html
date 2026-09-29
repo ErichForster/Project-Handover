@@ -486,7 +486,8 @@
     display: flex; justify-content: space-between; align-items: center;
     font-weight: 700; font-size: 13px; color: var(--navy);
   }
-  .variation-body { padding: 16px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  .variation-body { padding: 16px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  @media (max-width: 700px) { .variation-body { grid-template-columns: 1fr 1fr; } }
   .variation-body .full { grid-column: 1 / -1; }
   .variation-body label { font-size: 12px; font-weight: 600; color: var(--navy); display: block; margin-bottom: 4px; }
   .variation-body input[type=text], .variation-body input[type=date], .variation-body textarea {
@@ -848,16 +849,17 @@
           </div>
         </div>
         <div class="form-row">
-          <label>Transport Requirements</label>
+          <label>Transport Restrictions</label>
           <div class="field-wrap">
             <div class="multiselect-wrap" id="transportWrap">
               <div class="multiselect-display" id="transportDisplay" onclick="toggleMultiselect('transport')">— Select all that apply —</div>
               <div class="multiselect-dropdown" id="transportDropdown" style="display:none">
-                <label><input type="checkbox" value="Standard" onchange="updateMultiselect('transport')"> Standard</label>
-                <label><input type="checkbox" value="Semi Access" onchange="updateMultiselect('transport')"> Semi Access</label>
-                <label><input type="checkbox" value="Rigid Access" onchange="updateMultiselect('transport')"> Rigid Access</label>
-                <label><input type="checkbox" value="Wide Load Access" onchange="updateMultiselect('transport')"> Wide Load Access</label>
-<label><input type="checkbox" value="Permit Required" onchange="updateMultiselect('transport')"> Permit Required</label>
+                <label><input type="checkbox" value="None" onchange="updateMultiselect('transport', this)"> None — no restrictions</label>
+                <label><input type="checkbox" value="Standard" onchange="updateMultiselect('transport', this)"> Standard</label>
+                <label><input type="checkbox" value="Semi Access" onchange="updateMultiselect('transport', this)"> Semi Access</label>
+                <label><input type="checkbox" value="Rigid Access" onchange="updateMultiselect('transport', this)"> Rigid Access</label>
+                <label><input type="checkbox" value="Wide Load Access" onchange="updateMultiselect('transport', this)"> Wide Load Access</label>
+<label><input type="checkbox" value="Permit Required" onchange="updateMultiselect('transport', this)"> Permit Required</label>
               </div>
             </div>
           </div>
@@ -1571,7 +1573,13 @@ function toggleMultiselect(id) {
   }
 }
 
-function updateMultiselect(id) {
+function updateMultiselect(id, changed) {
+  // "None" can't sit alongside actual restrictions: ticking one clears the other.
+  if (changed && changed.checked) {
+    document.querySelectorAll(`#${id}Dropdown input[type=checkbox]`).forEach(cb => {
+      if (cb !== changed && (changed.value === 'None' || cb.value === 'None')) cb.checked = false;
+    });
+  }
   const checks = document.querySelectorAll(`#${id}Dropdown input[type=checkbox]:checked`);
   const vals = Array.from(checks).map(c => c.value);
   const display = document.getElementById(id + 'Display');
@@ -1682,7 +1690,7 @@ function defaultBuilding(n) {
   return {
     name: `Building ${n}`,
     roofTruss: false, roofPurlin: false, roofCassette: false,
-    infillWalls: false, hybridSolution: false,
+    infillWalls: false, hybridSolution: false, floorFraming: false,
     qty: '', unit: 'm2_roof',
     scopeWritten: '', notes: ''
   };
@@ -1718,6 +1726,7 @@ function renderBuildings() {
           <div class="check-row">
             <label><input type="checkbox" ${b.infillWalls?'checked':''} onchange="state.buildings[${i}].infillWalls=this.checked;autoSave()"> Infill Walls</label>
             <label><input type="checkbox" ${b.hybridSolution?'checked':''} onchange="state.buildings[${i}].hybridSolution=this.checked;autoSave()"> Hybrid Solution</label>
+            <label><input type="checkbox" ${b.floorFraming?'checked':''} onchange="state.buildings[${i}].floorFraming=this.checked;autoSave()"> Floor Framing</label>
           </div>
         </div>
         <div>
@@ -1730,6 +1739,7 @@ function renderBuildings() {
               onchange="state.buildings[${i}].unit=this.value;autoSave()">
               <option value="m2_roof" ${(b.unit||'m2_roof')==='m2_roof'?'selected':''}>Roof Area (m²)</option>
               <option value="m2_wall" ${b.unit==='m2_wall'?'selected':''}>Wall Area (m²)</option>
+              <option value="m2_floor" ${b.unit==='m2_floor'?'selected':''}>Floor Area (m²)</option>
               <option value="lm" ${b.unit==='lm'?'selected':''}>Lineal Metres (lm)</option>
               <option value="units" ${b.unit==='units'?'selected':''}>Units</option>
             </select>
@@ -1770,7 +1780,9 @@ function toggleBuildingPanel(i) {
 // VARIATIONS
 // ════════════════════════════════════════════════════
 function defaultVariation(n) {
-  return { id: Date.now()+n, title:`Variation ${n}`, description:'', onSiteDate:'', dateReceived:'', dateApproved:'', images:[] };
+  return { id: Date.now()+n, title:`Variation ${n}`, description:'', dateSubmitted:'', onSiteDate:'', dateReceived:'', dateApproved:'', images:[],
+           // When it was entered and by whom, so the record stands up as evidence.
+           createdAt: new Date().toISOString(), createdBy: lsGet(EDITOR_KEY) || '' };
 }
 
 function renderVariations() {
@@ -1800,8 +1812,8 @@ function renderVariations() {
           <textarea rows="3" placeholder="Describe the scope change…" oninput="state.variations[${i}].description=this.value;autoSave()">${escHtml(v.description||'')}</textarea>
         </div>
         <div>
-          <label>On-Site Date</label>
-          <input type="date" value="${escHtml(v.onSiteDate)}" onchange="state.variations[${i}].onSiteDate=this.value;autoSave()">
+          <label>Date Submitted</label>
+          <input type="date" value="${escHtml(v.dateSubmitted||'')}" onchange="state.variations[${i}].dateSubmitted=this.value;autoSave()">
         </div>
         <div>
           <label>Date Received</label>
@@ -1811,6 +1823,11 @@ function renderVariations() {
           <label>Date Approved</label>
           <input type="date" value="${escHtml(v.dateApproved)}" onchange="state.variations[${i}].dateApproved=this.value;autoSave()">
         </div>
+        <div>
+          <label>On-Site Date</label>
+          <input type="date" value="${escHtml(v.onSiteDate)}" onchange="state.variations[${i}].onSiteDate=this.value;autoSave()">
+        </div>
+        ${variationLogged(v) ? `<div class="full" style="font-size:12px;color:var(--muted)">${escHtml(variationLogged(v))}</div>` : ''}
         <div class="full">
           <label>Scope Images</label>
           <div>
@@ -1829,6 +1846,15 @@ function renderVariations() {
       </div>`;
     c.appendChild(div);
   });
+}
+
+// "Logged 22 Aug 2026 by Sam" - when the variation was entered in the app.
+// Older variations have no createdAt, but their id is the creation time.
+function variationLogged(v) {
+  const t = v.createdAt ? new Date(v.createdAt) : (v.id > 1.5e12 ? new Date(Math.floor(v.id)) : null);
+  if (!t || isNaN(t)) return '';
+  return 'Logged ' + t.toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: 'numeric' }) +
+    (v.createdBy ? ' by ' + v.createdBy : '');
 }
 
 function addVariation() {
@@ -2292,7 +2318,7 @@ function buildLockedHTMLString(s, date) {
   const C_MUTED  = '#7a6a5a';
 
   const sectionHdr = (icon, title) =>
-    `<div style="background:${C_DARK};color:#fff;padding:12px 20px;font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:700;letter-spacing:.5px;border-radius:6px 6px 0 0;display:flex;align-items:center;gap:8px">
+    `<div class="sec-hdr" style="background:${C_DARK};color:#fff;padding:12px 20px;font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:700;letter-spacing:.5px;border-radius:6px 6px 0 0;display:flex;align-items:center;gap:8px">
       ${icon} ${title}
     </div>`;
 
@@ -2310,8 +2336,9 @@ function buildLockedHTMLString(s, date) {
     </tr>`;
   };
 
-  const card = (hdr, body) =>
-    `<div style="background:#fff;border-radius:6px;box-shadow:0 2px 12px rgba(43,43,43,.1);margin-bottom:24px;overflow:hidden">
+  // keep: print the whole card on one page (short sections like the map).
+  const card = (hdr, body, keep) =>
+    `<div class="card${keep ? ' keep' : ''}" style="background:#fff;border-radius:6px;box-shadow:0 2px 12px rgba(43,43,43,.1);margin-bottom:24px;overflow:hidden">
       ${hdr}
       <div style="padding:0">${body}</div>
     </div>`;
@@ -2330,7 +2357,7 @@ function buildLockedHTMLString(s, date) {
     ${infoRow('Site Address',           s.siteAddress)}
     ${infoRow('City / Town',            s.cityTown)}
     ${infoRow('Proximity to Ocean',     s.proximityToOcean)}
-    ${infoRow('Transport',              transport)}
+    ${infoRow('Transport Restrictions', transport)}
     ${infoRow('Cranage',                cranageStr)}
     ${infoRow('Draftsperson(s)',        s.draftspersons)}
     ${infoRow('Design Time Allowed',    s.designTimeAllowed)}
@@ -2340,12 +2367,12 @@ function buildLockedHTMLString(s, date) {
   // ── BUILDINGS ──
   const buildingsHTML = (s.buildings||[]).length ? (s.buildings||[]).map((b,i) => {
     const roofParts = [b.roofTruss?'Truss':null,b.roofPurlin?'Purlin':null,b.roofCassette?'Cassette':null].filter(Boolean).join(', ')||'—';
-    const other = [b.infillWalls?'Infill Walls':null,b.hybridSolution?'Hybrid Solution':null].filter(Boolean).join(', ')||'—';
-    const unitLabels = { m2_roof:'m² (Roof Area)', m2_wall:'m² (Wall Area)', lm:'lm (Lineal Metres)', units:'Units' };
+    const other = [b.infillWalls?'Infill Walls':null,b.hybridSolution?'Hybrid Solution':null,b.floorFraming?'Floor Framing':null].filter(Boolean).join(', ')||'—';
+    const unitLabels = { m2_roof:'m² (Roof Area)', m2_wall:'m² (Wall Area)', m2_floor:'m² (Floor Area)', lm:'lm (Lineal Metres)', units:'Units' };
     const unit = b.unit || 'm2_roof';
     const qtyStr = b.qty ? (b.qty + ' ' + (unitLabels[unit] || unit)) : '—';
     const bg = i%2===0?C_PALE:'#fff';
-    return `<div style="background:${bg};border-bottom:1px solid ${C_BORDER};padding:10px 16px">
+    return `<div class="keep" style="background:${bg};border-bottom:1px solid ${C_BORDER};padding:10px 16px">
       <div style="font-weight:700;font-size:13px;color:${C_DARK};margin-bottom:6px">🏗 ${esc(b.name||'Building '+(i+1))}</div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:12px;margin-bottom:6px">
         <div><span style="color:${C_MUTED}">Roof Type:</span> ${esc(roofParts)}</div>
@@ -2494,18 +2521,23 @@ function buildLockedHTMLString(s, date) {
   }
 
   // ── IMAGES ──
+  // Each image prints as one unit - its title above, the drawing, then the
+  // file name - and never splits across pages (see .img-block in the CSS).
+  // The title used to sit under the drawing, so it read as the heading of
+  // the next one and ended up stranded at the foot of a page.
+  const imgBlock = (img, meta) => `
+      <div class="img-block" style="border-top:1px solid ${C_BORDER}">
+        ${meta && (meta.description || meta.notes) ? `
+        <div style="padding:10px 14px;background:${C_PALE}">
+          ${meta.description ? `<div style="font-size:13px;font-weight:600;color:${C_DARK};margin-bottom:${meta.notes ? '4px' : '0'}">📍 ${esc(meta.description)}</div>` : ''}
+          ${meta.notes ? `<div style="font-size:12px;color:${C_MUTED}">${esc(meta.notes)}</div>` : ''}
+        </div>` : ''}
+        <img src="${img.src}" alt="${esc(img.name)}" style="width:100%;height:auto;display:block;margin:0 auto">
+        <div style="background:${C_PALE2};padding:6px 14px;font-size:12px;color:${C_MUTED};font-weight:500">📄 ${esc(img.name)}</div>
+      </div>`;
   const renderImgs = (imgs, label, showMeta) => {
     if (!imgs || !imgs.length) return `<div style="padding:16px;color:#aaa;font-size:13px">No ${label} uploaded</div>`;
-    return imgs.map(img => `
-      <div style="margin-bottom:0;border-top:1px solid ${C_BORDER}">
-        <img src="${img.src}" alt="${esc(img.name)}" style="width:100%;height:auto;display:block">
-        <div style="background:${C_PALE2};padding:6px 14px;font-size:12px;color:${C_MUTED};font-weight:500">📄 ${esc(img.name)}</div>
-        ${showMeta && (img.description || img.notes) ? `
-        <div style="padding:10px 14px;background:${C_PALE}">
-          ${img.description ? `<div style="font-size:13px;font-weight:600;color:${C_DARK};margin-bottom:4px">📍 ${esc(img.description)}</div>` : ''}
-          ${img.notes ? `<div style="font-size:12px;color:${C_MUTED}">${esc(img.notes)}</div>` : ''}
-        </div>` : ''}
-      </div>`).join('');
+    return imgs.map(img => imgBlock(img, showMeta ? img : null)).join('');
   };
 
   const lockedHTML = `<!DOCTYPE html>
@@ -2530,10 +2562,19 @@ function buildLockedHTMLString(s, date) {
   @media print{
     .topbar{display:none}
     .no-print{display:none}
-    body{background:#fff}
+    body{background:#fff;min-height:0}
     .container{margin:0;padding:10px}
     .two-col{display:block}
     .two-col > *{margin-bottom:20px}
+    /* Page breaks: a section title never ends a page, an image never splits
+       from its title, and the map card prints whole. */
+    .sec-hdr{break-after:avoid;page-break-after:avoid}
+    .img-block{break-inside:avoid;page-break-inside:avoid}
+    /* 105mm lets two landscape plans (with titles and notes) share a page. */
+    .img-block img{width:auto!important;max-width:100%;max-height:105mm}
+    .keep{break-inside:avoid;page-break-inside:avoid}
+    .card{box-shadow:none!important}
+    .var-head{break-inside:avoid;page-break-inside:avoid}
   }
   @media(max-width:700px){.two-col{display:block}}
 </style>
@@ -2639,7 +2680,7 @@ function buildLockedHTMLString(s, date) {
   ${card(sectionHdr('📐','Scope Diagrams / Plans'), renderImgs(s.scopeImages,'scope diagrams',true))}
 
   <!-- MAP -->
-  ${card(sectionHdr('📍','Site Location & Map'), mapHTML)}
+  ${card(sectionHdr('📍','Site Location & Map'), mapHTML, true)}
 
   <!-- SITE PHOTOS -->
   ${card(sectionHdr('📷','Site Photos / Access Maps'), renderImgs(s.siteImages,'site photos',false))}
@@ -2647,29 +2688,28 @@ function buildLockedHTMLString(s, date) {
   <!-- VARIATIONS -->
   ${(s.variations||[]).length ? card(sectionHdr('📝','Variations'), (s.variations||[]).map((v,i) => {
     const bg = i%2===0?C_PALE:'#fff';
-    const varImgs = (v.images||[]).map(img =>
-      `<div style="display:inline-block;margin:4px 4px 4px 0;vertical-align:top">
-        <img src="${img.src}" alt="${esc(img.name)}" style="width:160px;height:120px;object-fit:cover;border-radius:4px;border:1px solid ${C_BORDER};display:block">
-        <div style="font-size:10px;color:${C_MUTED};margin-top:2px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(img.name)}</div>
-      </div>`).join('');
-    return `<div style="background:${bg};border-bottom:2px solid ${C_BORDER};padding:16px 20px">
+    // Markups print full width, the same as scope diagrams - as thumbnails
+    // they were unreadable once there was more than one.
+    const varImgs = (v.images||[]).map(img => imgBlock(img, null)).join('');
+    const dateBox = (label, value) => `
+        <div style="background:${C_PALE2};padding:8px 12px;border-radius:4px">
+          <div style="font-weight:700;color:${C_MUTED};margin-bottom:2px">${label}</div>
+          <div>${fmtDate(value)}</div>
+        </div>`;
+    const logged = variationLogged(v);
+    return `<div style="background:${bg};border-bottom:2px solid ${C_BORDER}">
+      <div class="var-head" style="padding:16px 20px">
       <div style="font-weight:700;font-size:15px;color:${C_DARK};margin-bottom:10px">📝 ${esc(v.title||'Variation '+(i+1))}</div>
       ${v.description ? `<div style="font-size:13px;margin-bottom:12px;white-space:pre-wrap;line-height:1.5">${esc(v.description)}</div>` : ''}
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;font-size:12px;margin-bottom:${varImgs?'12px':'0'}">
-        <div style="background:${C_PALE2};padding:8px 12px;border-radius:4px">
-          <div style="font-weight:700;color:${C_MUTED};margin-bottom:2px">On-Site Date</div>
-          <div>${fmtDate(v.onSiteDate)}</div>
-        </div>
-        <div style="background:${C_PALE2};padding:8px 12px;border-radius:4px">
-          <div style="font-weight:700;color:${C_MUTED};margin-bottom:2px">Date Received</div>
-          <div>${fmtDate(v.dateReceived)}</div>
-        </div>
-        <div style="background:${C_PALE2};padding:8px 12px;border-radius:4px">
-          <div style="font-weight:700;color:${C_MUTED};margin-bottom:2px">Date Approved</div>
-          <div>${fmtDate(v.dateApproved)}</div>
-        </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;font-size:12px">
+        ${dateBox('Date Submitted', v.dateSubmitted)}
+        ${dateBox('Date Received', v.dateReceived)}
+        ${dateBox('Date Approved', v.dateApproved)}
+        ${dateBox('On-Site Date', v.onSiteDate)}
       </div>
-      ${varImgs ? `<div style="margin-top:4px">${varImgs}</div>` : ''}
+      ${logged ? `<div style="font-size:11px;color:${C_MUTED};margin-top:8px">${esc(logged)}</div>` : ''}
+      </div>
+      ${varImgs}
     </div>`;
   }).join('')) : ''}
 
@@ -2727,7 +2767,7 @@ function exportExcel() {
     ['Building Type',            s.buildingType           || ''],
     ['City / Town',              s.cityTown               || ''],
     ['Proximity to Ocean',       s.proximityToOcean       || ''],
-    ['Transport Requirements',   s.transportRequirements  || ''],
+    ['Transport Restrictions',   (s.transportSelected || []).join(', ')],
     ['Draftsperson(s)',          s.draftspersons          || ''],
     ['Notes',                    s.jobNotes               || ''],
     ['', '', '', ''],
