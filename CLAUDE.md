@@ -63,3 +63,17 @@ simulated; Supabase is the real shared database, so clean up test rows.
   localStorage keys (`austruss_autosave`, `austruss_cloud_job`,
   `austruss_passcode`, `austruss_editor`) without calling it out, since saved
   jobs and people's browsers depend on them.
+
+## Light / dark toggle (2026-10-08)
+
+Sun/moon button at the end of the top bar (shared spec
+`Code/.claude/theme-spec.md`). The choice is saved in the cookie `aus-theme`
+(`Domain=.austrussapps.com` on the live site, so it carries across the
+Austruss apps) plus localStorage `aus-theme`; a tiny script at the top of
+`<head>` applies it before the page draws. Nothing saved = follow the
+computer. Colours are `:root` variables (`--page`, `--chrome`, `--bar`,
+`--surface`, `--input`, plus the old `--navy`/`--pale`/`--border`…); the dark
+values sit under `@media screen`, so Ctrl+P prints light. Print / PDF and
+Save Locked build their own pages with fixed colours and are untouched.
+Save HTML strips `data-theme` from the copy it saves. New styles must use the
+variables, not fixed colours.

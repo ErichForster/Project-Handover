@@ -4,6 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Austruss — Drafting Scope & Details</title>
+<script>
+  // Light / dark: saved choice (shared cookie across austrussapps.com, else this browser) or the computer's setting.
+  (function () { try { var m = document.cookie.match(/(?:^|;\s*)aus-theme=(light|dark)/), t = m ? m[1] : localStorage.getItem("aus-theme");
+    if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {} })();
+</script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600;700&family=Barlow+Condensed:wght@500;600;700&display=swap');
 
@@ -25,6 +30,48 @@
     --tbc:    #FEF9E7;
     --radius: 6px;
     --shadow: 0 2px 12px rgba(43,43,43,.12);
+    color-scheme: light;
+    --page:    #f0ebe4;   /* page behind the cards */
+    --chrome:  #2b2b2b;   /* top bar + side nav */
+    --bar:     #2b2b2b;   /* section headers, table headers, toast */
+    --surface: #ffffff;   /* cards, dialogs, dropdowns */
+    --input:   #ffffff;
+    --locked-bg: #f3efea; --locked-bdr: #e2d6c8;
+    --yes-bg: #d5f5e3; --yes-fg: #1e8449;
+    --no-bg:  #fadbd8; --no-fg:  #c0392b;
+    --tbc-fg: #b7770d;
+    --ok-bg:  #dff0d8;
+  }
+  /* Dark palette, screen only: printing (Ctrl+P) keeps the light look; the
+     Print / PDF and Save Locked copies are their own pages and stay light too. */
+  @media screen and (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --navy: #f0ebe4; --text: #ffffff; --muted: #a89a8a;
+      --pale: #211a13; --pale2: #33261a; --light: #1e1a16; --border: #4a3a28; --tbc: #3a2f14;
+      --shadow: 0 2px 12px rgba(0,0,0,.5);
+      --page: #0d0d0d; --chrome: #1a1a19; --bar: #2c2c2a; --surface: #1a1a19; --input: #232321;
+      --locked-bg: #262421; --locked-bdr: #3a3530;
+      --yes-bg: #12301a; --yes-fg: #7fd486; --no-bg: #3a1d1d; --no-fg: #ff8a8a; --tbc-fg: #f0c060;
+      --ok-bg: #12301a;
+    }
+  }
+  @media screen {
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --navy: #f0ebe4; --text: #ffffff; --muted: #a89a8a;
+      --pale: #211a13; --pale2: #33261a; --light: #1e1a16; --border: #4a3a28; --tbc: #3a2f14;
+      --shadow: 0 2px 12px rgba(0,0,0,.5);
+      --page: #0d0d0d; --chrome: #1a1a19; --bar: #2c2c2a; --surface: #1a1a19; --input: #232321;
+      --locked-bg: #262421; --locked-bdr: #3a3530;
+      --yes-bg: #12301a; --yes-fg: #7fd486; --no-bg: #3a1d1d; --no-fg: #ff8a8a; --tbc-fg: #f0c060;
+      --ok-bg: #12301a;
+    }
+  }
+  /* Fields without their own background follow the theme (no specificity, so
+     every class rule below still wins). */
+  :where(input:not([type=checkbox]):not([type=radio]):not([type=file]), select, textarea) {
+    background-color: var(--input); color: var(--text);
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -32,14 +79,14 @@
 
   body {
     font-family: 'Barlow', sans-serif;
-    background: #f0ebe4;
+    background: var(--page);
     color: var(--text);
     min-height: 100vh;
   }
 
   /* ── TOP NAV ── */
   #topbar {
-    background: #2b2b2b;
+    background: var(--chrome);
     color: #fff;
     display: flex;
     align-items: center;
@@ -66,6 +113,8 @@
     letter-spacing: .5px;
   }
   #topbar .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+  #topbar .themebtn { padding: 6px 8px; }
+  #topbar .themebtn svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; display: block; }
 
   .btn {
     display: inline-flex; align-items: center; gap: 6px;
@@ -87,11 +136,11 @@
   .btn-sm     { padding: 5px 12px; font-size: 12px; }
 
   /* ── SIDE NAV ── */
-  #layout { display: flex; min-height: calc(100vh - 64px); align-items: stretch; background: #2b2b2b; }
+  #layout { display: flex; min-height: calc(100vh - 64px); align-items: stretch; background: var(--chrome); }
 
   #sidenav {
     width: 220px; flex-shrink: 0;
-    background: #2b2b2b;
+    background: var(--chrome);
     padding: 20px 0;
     position: sticky; top: 64px;
     height: calc(100vh - 64px);
@@ -99,7 +148,7 @@
     align-self: flex-start;
   }
 
-  #main { flex: 1; padding: 28px; overflow-x: hidden; background: #f0ebe4; }
+  #main { flex: 1; padding: 28px; overflow-x: hidden; background: var(--page); }
   #sidenav a {
     display: block; padding: 10px 20px;
     color: rgba(255,255,255,.7); font-size: 13px; font-weight: 500;
@@ -121,7 +170,7 @@
 
   .page-title {
     font-family: 'Barlow Condensed', sans-serif;
-    font-size: 32px; font-weight: 700; color: #2b2b2b;
+    font-size: 32px; font-weight: 700; color: var(--navy);
     border-bottom: 3px solid #ec8516;
     padding-bottom: 10px; margin-bottom: 24px;
     display: flex; justify-content: space-between; align-items: flex-end;
@@ -130,14 +179,14 @@
 
   /* ── SECTION CARDS ── */
   .section-card {
-    background: #fff;
+    background: var(--surface);
     border-radius: var(--radius);
     box-shadow: var(--shadow);
     margin-bottom: 24px;
     overflow: hidden;
   }
   .section-header {
-    background: #2b2b2b;
+    background: var(--bar);
     color: #fff;
     padding: 12px 20px;
     font-family: 'Barlow Condensed', sans-serif;
@@ -161,7 +210,7 @@
     display: contents;
   }
   .form-row > label {
-    background: #fde8cc;
+    background: var(--pale2);
     padding: 9px 14px;
     font-size: 13px; font-weight: 600;
     display: flex; align-items: center;
@@ -181,7 +230,7 @@
     border: 1.5px solid var(--border);
     border-radius: var(--radius);
     font-family: 'Barlow', sans-serif; font-size: 13px;
-    color: var(--text); background: #fff;
+    color: var(--text); background: var(--input);
     transition: border-color .15s;
   }
   .form-grid input:focus, .form-grid select:focus, .form-grid textarea:focus {
@@ -193,7 +242,7 @@
   /* ── SCOPE TABLE ── */
   .scope-table { width: 100%; border-collapse: collapse; }
   .scope-table th {
-    background: #2b2b2b; color: #fff;
+    background: var(--bar); color: #fff;
     padding: 9px 12px; font-size: 12px; font-weight: 600;
     text-align: left;
   }
@@ -214,7 +263,7 @@
     padding: 4px 8px; border: 1.5px solid var(--border);
     border-radius: var(--radius);
     font-family: 'Barlow', sans-serif; font-size: 12px;
-    background: #fff; min-width: 80px;
+    background: var(--input); color: var(--text); min-width: 80px;
   }
   .scope-table select:focus { outline: none; border-color: var(--blue); }
   .scope-table input[type=text] {
@@ -224,14 +273,14 @@
   }
   .scope-table input:focus { outline: none; border-color: var(--blue); }
 
-  .badge-yes  { background: #d5f5e3; color: #1e8449; }
-  .badge-no   { background: #fadbd8; color: #c0392b; }
-  .badge-tbc  { background: #fef9e7; color: #b7770d; }
+  .badge-yes  { background: var(--yes-bg); color: var(--yes-fg); }
+  .badge-no   { background: var(--no-bg); color: var(--no-fg); }
+  .badge-tbc  { background: var(--tbc); color: var(--tbc-fg); }
 
   /* ── LINKS TABLE ── */
   .links-table { width: 100%; border-collapse: collapse; }
   .links-table th {
-    background: #2b2b2b; color: #fff;
+    background: var(--bar); color: #fff;
     padding: 9px 12px; font-size: 12px; font-weight: 600;
   }
   .links-table td {
@@ -273,7 +322,7 @@
     color: var(--muted); font-size: 13px;
   }
   .drop-zone:hover { background: var(--pale2); border-color: var(--amber); }
-  .drop-zone.dragover { background: #dff0d8; border-color: var(--green); }
+  .drop-zone.dragover { background: var(--ok-bg); border-color: var(--green); }
   .drop-zone input[type=file] { display: none; }
   .img-thumbs { display: flex; flex-direction: column; gap: 16px; margin-top: 16px; }
   .img-thumb {
@@ -314,7 +363,7 @@
     width: 100%; padding: 7px 10px;
     border: 1.5px solid var(--border); border-radius: var(--radius);
     font-family: 'Barlow', sans-serif; font-size: 13px; color: var(--text);
-    background: #fff;
+    background: var(--input);
   }
   .img-meta input:focus, .img-meta textarea:focus {
     outline: none; border-color: var(--blue);
@@ -333,7 +382,7 @@
   /* ── TOAST ── */
   #toast {
     position: fixed; bottom: 24px; right: 24px;
-    background: var(--navy); color: #fff;
+    background: var(--bar); color: #fff;
     padding: 12px 20px; border-radius: var(--radius);
     font-size: 13px; font-weight: 500;
     box-shadow: 0 4px 20px rgba(0,0,0,.25);
@@ -351,7 +400,7 @@
   }
   .modal-overlay.open { display: flex; }
   .modal-box {
-    background: #fff; border-radius: var(--radius);
+    background: var(--surface); color: var(--text); border-radius: var(--radius);
     padding: 28px; max-width: 500px; width: 90%;
     box-shadow: 0 8px 40px rgba(0,0,0,.3);
   }
@@ -366,8 +415,8 @@
   body:not(.cloud-on) .cloud-only { display: none !important; }
   /* Job details that come from Smartsheet (Project Admin) are read-only. */
   .form-grid input.ss-locked {
-    background: #f3efea; color: var(--text); cursor: default;
-    border-color: #e2d6c8; border-style: dashed;
+    background: var(--locked-bg); color: var(--text); cursor: default;
+    border-color: var(--locked-bdr); border-style: dashed;
   }
   .job-pick { gap: 8px; }
   .job-pick .btn { flex-shrink: 0; }
@@ -413,7 +462,7 @@
   .multiselect-wrap { position: relative; width: 100%; }
   .multiselect-display {
     padding: 6px 10px; border: 1.5px solid var(--border);
-    border-radius: var(--radius); background: #fff;
+    border-radius: var(--radius); background: var(--input);
     font-size: 13px; cursor: pointer; color: var(--text);
     display: flex; align-items: center; justify-content: space-between;
     min-height: 34px;
@@ -421,7 +470,7 @@
   .multiselect-display::after { content: '▾'; color: var(--muted); margin-left: 8px; }
   .multiselect-dropdown {
     position: absolute; top: calc(100% + 4px); left: 0; right: 0;
-    background: #fff; border: 1.5px solid var(--blue);
+    background: var(--surface); border: 1.5px solid var(--blue);
     border-radius: var(--radius); z-index: 50;
     box-shadow: 0 4px 16px rgba(0,0,0,.15);
     padding: 6px 0;
@@ -437,7 +486,7 @@
   /* ── CONTACTS TABLE ── */
   .contacts-table { width: 100%; border-collapse: collapse; }
   .contacts-table th {
-    background: #2b2b2b; color: #fff;
+    background: var(--bar); color: #fff;
     padding: 9px 12px; font-size: 12px; font-weight: 600; text-align: left;
   }
   .contacts-table td {
@@ -469,7 +518,7 @@
     width: 100%; padding: 6px 10px;
     border: 1.5px solid var(--border); border-radius: var(--radius);
     font-family: 'Barlow', sans-serif; font-size: 12px; color: var(--text);
-    background: #fff;
+    background: var(--input);
   }
   .building-body input:focus, .building-body select:focus, .building-body textarea:focus {
     outline: none; border-color: var(--blue);
@@ -528,7 +577,7 @@
   .maps-controls select {
     width: 100%; padding: 8px 10px;
     border: 1.5px solid var(--border); border-radius: var(--radius);
-    font-family: 'Barlow', sans-serif; font-size: 13px; background: #fff;
+    font-family: 'Barlow', sans-serif; font-size: 13px; background: var(--input); color: var(--text);
   }
   .maps-controls select:focus { outline: none; border-color: var(--blue); }
 
@@ -584,7 +633,7 @@
   }
   .route-step:last-child { border-bottom: none; }
   .route-step .step-num {
-    background: var(--navy); color: #fff;
+    background: var(--bar); color: #fff;
     width: 18px; height: 18px; border-radius: 50%;
     font-size: 10px; font-weight: 700;
     display: flex; align-items: center; justify-content: center;
@@ -751,6 +800,7 @@
     <button class="btn btn-blue" onclick="saveHTML()">🌐 Save HTML</button>
     <button class="btn btn-amber" onclick="saveLockedHTML()">🔒 Save Locked</button>
     <button class="btn btn-green" onclick="printPDF()">🖨 Print / PDF</button>
+    <button type="button" class="btn btn-outline themebtn" id="themebtn" onclick="toggleTheme()"></button>
   </div>
 </div>
 
@@ -1298,6 +1348,35 @@
 </div>
 
 <script>
+// ── Light / dark ──
+// The top-bar button flips between the two. The choice goes in a cookie shared by
+// every *.austrussapps.com app (plus this browser's storage); the <head> script
+// applies it before the page draws. Nothing saved = follow the computer.
+const darkMq = matchMedia('(prefers-color-scheme: dark)');
+const isDark = () => (document.documentElement.dataset.theme || (darkMq.matches ? 'dark' : 'light')) === 'dark';
+const THEME_ICON = {
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  moon: '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>',
+};
+function saveTheme(t) {
+  const dom = location.hostname.endsWith('austrussapps.com') ? '; Domain=.austrussapps.com' : '';
+  document.cookie = `aus-theme=${t}; Path=/; Max-Age=34560000; SameSite=Lax${dom}`;
+  try { localStorage.setItem('aus-theme', t); } catch (e) { /* private window */ }
+  document.documentElement.dataset.theme = t;
+  syncThemeBtn();
+}
+function toggleTheme() { saveTheme(isDark() ? 'light' : 'dark'); }
+function syncThemeBtn() {
+  const b = document.getElementById('themebtn');
+  if (!b) return;
+  const dark = isDark();
+  b.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${THEME_ICON[dark ? 'sun' : 'moon']}</svg>`;
+  b.title = dark ? 'Switch to light mode' : 'Switch to dark mode';
+  b.setAttribute('aria-label', b.title);
+}
+darkMq.addEventListener('change', syncThemeBtn);
+syncThemeBtn();
+
 // ════════════════════════════════════════════════════
 // DATA DEFINITIONS
 // ════════════════════════════════════════════════════
@@ -1653,7 +1732,7 @@ function renderOtherNotes() {
   if (!c) return;
   c.innerHTML = '';
   (state.otherNotes || []).forEach((note, i) => {
-    const bg = i % 2 === 0 ? 'var(--pale)' : '#fff';
+    const bg = i % 2 === 0 ? 'var(--pale)' : 'var(--surface)';
     const div = document.createElement('div');
     div.style.cssText = `display:grid;grid-template-columns:3fr 1fr 3fr auto;gap:8px;padding:7px 12px;border-bottom:1px solid var(--border);background:${bg};align-items:center`;
     div.innerHTML = `
@@ -1735,7 +1814,7 @@ function renderBuildings() {
             <input type="number" value="${escHtml(String(b.qty||''))}" placeholder="e.g. 350" min="0" step="0.1"
               style="width:90px;padding:6px 8px;border:1.5px solid var(--border);border-radius:var(--radius);font-family:'Barlow',sans-serif;font-size:12px"
               oninput="state.buildings[${i}].qty=this.value;autoSave()">
-            <select style="padding:6px 8px;border:1.5px solid var(--border);border-radius:var(--radius);font-family:'Barlow',sans-serif;font-size:12px;background:#fff"
+            <select style="padding:6px 8px;border:1.5px solid var(--border);border-radius:var(--radius);font-family:'Barlow',sans-serif;font-size:12px;background:var(--input);color:var(--text)"
               onchange="state.buildings[${i}].unit=this.value;autoSave()">
               <option value="m2_roof" ${(b.unit||'m2_roof')==='m2_roof'?'selected':''}>Roof Area (m²)</option>
               <option value="m2_wall" ${b.unit==='m2_wall'?'selected':''}>Wall Area (m²)</option>
@@ -2256,6 +2335,8 @@ function saveHTML() {
   const project = (state.projectName || 'Austruss').replace(/[^a-z0-9]/gi,'_');
   const stateJson = JSON.stringify(state).replace(/<\/script>/gi,'<\\/script>');
   let html = document.documentElement.outerHTML;
+  // The saved copy keeps its default look: drop this browser's light/dark pick.
+  html = html.replace(/^(<html[^>]*?) data-theme="(?:light|dark)"/i, '$1');
 
   // Remove any previously injected state block to avoid duplication
   html = html.replace(/<!--AUSTRUSS_STATE_START-->[\s\S]*?<!--AUSTRUSS_STATE_END-->/g, '');
