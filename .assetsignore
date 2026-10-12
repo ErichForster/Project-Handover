@@ -11,4 +11,5 @@ scripts
 node_modules
 CLAUDE.md
 README.md
-.dev.vars
+.dev.vars*
+.env*

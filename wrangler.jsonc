@@ -21,5 +21,10 @@
     // handover_* functions are callable.
     "SUPABASE_URL": "https://vrhapkrtbxcccmbnjkco.supabase.co",
     "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_i-ed9yHRmRJWywa5PqEMuQ_INMTnrrl"
+  },
+  // Keep Worker logs in the Cloudflare dashboard (Workers > austruss-handover
+  // > Logs) for troubleshooting.
+  "observability": {
+    "enabled": true
   }
 }
