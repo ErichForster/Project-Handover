@@ -1,0 +1,25 @@
+{
+  // Serves index.html as a static asset; worker.js adds the R2 image
+  // endpoints (/images/*, /api/images/*). No build step.
+  "name": "austruss-handover",
+  "main": "./worker.js",
+  "compatibility_date": "2026-09-11",
+  "assets": {
+    "directory": ".",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*", "/images/*"]
+  },
+  "r2_buckets": [
+    {
+      "binding": "IMAGES",
+      "bucket_name": "austruss-handover"
+    }
+  ],
+  "vars": {
+    // Shared Austruss project; the publishable key is safe to ship — the
+    // handovers table is closed to it and only the passcode-checked
+    // handover_* functions are callable.
+    "SUPABASE_URL": "https://vrhapkrtbxcccmbnjkco.supabase.co",
+    "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_i-ed9yHRmRJWywa5PqEMuQ_INMTnrrl"
+  }
+}

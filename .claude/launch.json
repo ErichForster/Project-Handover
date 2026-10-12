@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "project-handover",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["--yes", "wrangler@4", "dev", "--persist-to", "../.wrangler/project-handover-state", "--port", "8104", "--ip", "127.0.0.1"],
+      "port": 8104
+    }
+  ]
+}
